@@ -87,9 +87,9 @@ fastapi_sample/
 │   └── env.py               # Alembic configuration
 ├── docs/
 │   ├── API.md               # API documentation
-│   ├── API_GOVERNANCE.md    # API ownership and lifecycle policy
-│   └── COMPARISON.md        # Framework comparison guide
-├── .env                     # Local environment variables (not committed)
+│   ├── COMPARISON.md        # Framework comparison guide
+│   └── PROJECT.md           # Project explainer
+├── .env                     # Local environment variables 
 ├── alembic.ini              # Alembic configuration
 ├── pyproject.toml           # Project metadata and tool config
 ├── requirements.txt         # Python dependencies
@@ -157,6 +157,8 @@ This will create the necessary tables (`users` and `products`) in your database.
 
 ```bash
 uvicorn app.main:app --reload
+      or
+python3 -m uvicorn app.main:app --reload
 ```
 
 The API will be available at:
@@ -237,7 +239,7 @@ curl -X POST "http://localhost:8000/v1/products" \
 curl "http://localhost:8000/v1/products?limit=10"
 ```
 
-For complete API documentation, see [docs/API.md](docs/API.md) or visit the interactive documentation at http://localhost:8000/docs
+For complete API documentation, see [docs/API.md](docs/API.md), walkthrough [docs/PROJECT.md](docs/PROJECT.md), or visit the interactive documentation at http://localhost:8000/docs
 
 ##  Authentication
 
