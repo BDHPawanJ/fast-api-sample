@@ -18,6 +18,7 @@ from app.models.base import BaseModel  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.product import Product  # noqa: F401
 from app.models.idempotency_key import IdempotencyKey # noqa: F401
+from app.models.shopping_cart import ShoppingCart, CartItem # noqa: F401
 
 # This is the Alembic Config object
 config = context.config

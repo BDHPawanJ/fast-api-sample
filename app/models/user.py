@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Column, String, text
+from sqlalchemy.orm import relationship
 
 from app.models.base import BaseModel
 
@@ -52,6 +53,8 @@ class User(BaseModel):
         nullable=False,
         doc="Flag indicating if user account is active",
     )
+
+    cart = relationship("ShoppingCart", back_populates="user", uselist=False)
 
     def __repr__(self) -> str:
         """
