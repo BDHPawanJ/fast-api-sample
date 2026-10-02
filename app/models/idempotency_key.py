@@ -1,7 +1,6 @@
 """Database model for persisted idempotency keys."""
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
-from sqlalchemy.sql import func
+from sqlalchemy import Column, DateTime, Integer, String, Text, text
 
 from app.db.base import Base
 
@@ -30,4 +29,4 @@ class IdempotencyKey(Base):
     principal_id = Column(String(36), nullable=True, index=True)
     response_status = Column(Integer, nullable=False)
     response_body = Column(Text, nullable=False)
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))

@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from sqlalchemy import Column, Float, Integer, String, Text
+from sqlalchemy import Column, Float, Integer, String, Text, text
 
 from app.models.base import BaseModel
 
@@ -55,6 +55,7 @@ class Product(BaseModel):
         Integer,
         nullable=False,
         default=0,
+        server_default=text("0"),
         doc="Available stock quantity",
     )
 

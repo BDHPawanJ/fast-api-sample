@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, String
+from sqlalchemy import Boolean, Column, String, text
 
 from app.models.base import BaseModel
 
@@ -48,6 +48,7 @@ class User(BaseModel):
     is_active = Column(
         Boolean,
         default=True,
+        server_default=text("1"),
         nullable=False,
         doc="Flag indicating if user account is active",
     )

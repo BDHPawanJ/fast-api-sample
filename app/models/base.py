@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer
+from sqlalchemy import Column, DateTime, Integer, text
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -35,14 +35,14 @@ class BaseModel(Base):
     created_at = Column(
         DateTime,
         nullable=False,
-        server_default=func.now(),
+        server_default=text("CURRENT_TIMESTAMP"),
         doc="Timestamp of record creation",
     )
 
     updated_at = Column(
         DateTime,
         nullable=False,
-        server_default=func.now(),
+        server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
         onupdate=func.now(),
         doc="Timestamp of last update",
     )
