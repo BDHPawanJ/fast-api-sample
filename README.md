@@ -124,7 +124,7 @@ Create a `.env` file in the project root and set the following variables:
 
 ```env
 # Database Configuration
-DATABASE_URL=mysql+aiomysql://root:your_password@localhost:3306/fastapi_sample
+DATABASE_URL=mysql+aiomysql://root:password@127.0.0.1:3306/fastapi_sample
 
 # JWT Secret (generate a secure key)
 SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
@@ -139,7 +139,7 @@ DEBUG=True
 Create the MySQL database:
 
 ```bash
-mysql -u root -p
+mysql -u root -h 127.0.0.1 -ppassword 
 CREATE DATABASE fastapi_sample;
 CREATE DATABASE fastapi_sample_test;  # For testing
 exit;

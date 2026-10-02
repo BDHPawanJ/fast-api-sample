@@ -1,0 +1,12 @@
+services:
+  db:
+    hostname: db
+    image: mysql:8.0.42
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: lemonaid
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: password
+    ports:
+      - "3306:3306"
