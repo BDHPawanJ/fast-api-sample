@@ -17,9 +17,9 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 
 ##  Requirements
 
-- Python 3.8+
+- Python 3.13+ (uv installs it automatically if missing)
 - MySQL 5.7+ or MySQL 8.0+
-- pip or virtualenv for dependency management
+- [uv](https://docs.astral.sh/uv/) for Python and dependency management
 
 ##  Technology Stack
 
@@ -91,8 +91,8 @@ fastapi_sample/
 │   └── PROJECT.md           # Project explainer
 ├── .env                     # Local environment variables 
 ├── alembic.ini              # Alembic configuration
-├── pyproject.toml           # Project metadata and tool config
-├── requirements.txt         # Python dependencies
+├── pyproject.toml           # Project metadata, dependencies and tool config
+├── uv.lock                  # Locked dependency versions (managed by uv)
 └── README.md                # This file
 ```
 
@@ -105,18 +105,20 @@ git clone <repository-url>
 cd fastapi_sample
 ```
 
-### 2. Create Virtual Environment
+### 2. Install uv
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+curl -LsSf https://astral.sh/uv/install.sh | sh  # or: brew install uv
 ```
 
 ### 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+uv sync  # creates .venv and installs runtime + dev dependencies from uv.lock
 ```
+
+Prefix commands with `uv run` (e.g. `uv run pytest`) or activate `.venv` manually.
+To add or upgrade packages use `uv add <pkg>` / `uv add --dev <pkg>` / `uv lock --upgrade`.
 
 ### 4. Set Up Environment Variables
 
@@ -148,7 +150,7 @@ exit;
 ### 6. Run Database Migrations
 
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 This will create the necessary tables (`users` and `products`) in your database.
@@ -156,9 +158,7 @@ This will create the necessary tables (`users` and `products`) in your database.
 ### 7. Run the Application
 
 ```bash
-uvicorn app.main:app --reload
-      or
-python3 -m uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 ```
 
 The API will be available at:
@@ -171,7 +171,7 @@ The API will be available at:
 ### Run All Tests
 
 ```bash
-python3 -m pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
+uv run pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
 ```
 
 ### View Coverage Report
@@ -182,10 +182,10 @@ After running tests, open `htmlcov/index.html` in your browser to see the detail
 
 ```bash
 # Test only authentication
-pytest tests/test_auth.py -v
+uv run pytest tests/test_auth.py -v
 
 # Test only products
-pytest tests/test_products.py -v
+uv run pytest tests/test_products.py -v
 ```
 
 ##  Code Formatting
@@ -193,8 +193,8 @@ pytest tests/test_products.py -v
 Format all code with Black and isort:
 
 ```bash
-python3 -m isort app tests
-python3 -m black app tests
+uv run isort app tests
+uv run black app tests
 ```
 
 ##  API Documentation
@@ -276,7 +276,7 @@ If you encounter database connection errors:
 1. Verify MySQL is running: `mysql -u root -p`
 2. Check database exists: `SHOW DATABASES;`
 3. Verify credentials in `.env` file
-4. Ensure `aiomysql` is installed: `pip install aiomysql`
+4. Ensure dependencies are installed: `uv sync`
 
 ### Migration Issues
 
@@ -284,17 +284,17 @@ If Alembic migrations fail:
 
 ```bash
 # Reset migrations ( This will drop all tables!)
-alembic downgrade base
-alembic upgrade head
+uv run alembic downgrade base
+uv run alembic upgrade head
 ```
 
 ### Import Errors
 
-If you get import errors, ensure you're in the virtual environment:
+If you get import errors, make sure the environment is in sync and run commands through uv:
 
 ```bash
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
+uv run <command>
 ```
 
 ---

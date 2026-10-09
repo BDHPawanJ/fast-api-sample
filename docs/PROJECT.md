@@ -21,9 +21,7 @@ Base API version path: `/v1`
 Run these from project root:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
 ```
 
 Create `.env`:
@@ -47,13 +45,13 @@ exit;
 Apply migrations:
 
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 Run server:
 
 ```bash
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 ```
 
 Useful URLs:
@@ -68,21 +66,21 @@ Useful URLs:
 Run tests:
 
 ```bash
-pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
+uv run pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
 ```
 
 Run specific tests:
 
 ```bash
-pytest tests/test_auth.py -v
-pytest tests/test_products.py -v
+uv run pytest tests/test_auth.py -v
+uv run pytest tests/test_products.py -v
 ```
 
 Format code:
 
 ```bash
-python3 -m isort app tests
-python3 -m black app tests
+uv run isort app tests
+uv run black app tests
 ```
 
 ---

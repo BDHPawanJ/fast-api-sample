@@ -8,6 +8,21 @@ authors = [
 requires-python = ">=3.13"
 readme = "README.md"
 license = {text = "MIT"}
+dependencies = [
+    "aiomysql>=0.3.2",
+    "alembic>=1.20.0",
+    "bcrypt<4.1",
+    "email-validator>=2.3.0",
+    "fastapi>=0.142.2",
+    "greenlet>=3.5.6",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.4",
+    "python-jose[cryptography]>=3.5.0",
+    "sqlalchemy>=2.1.2",
+    "uvicorn[standard]>=0.54.0",
+]
 
 [tool.black]
 line-length = 88
@@ -71,3 +86,13 @@ omit = [
 precision = 2
 show_missing = true
 skip_covered = false
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "httpx==0.26.0",
+    "isort>=9.0.2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+]
