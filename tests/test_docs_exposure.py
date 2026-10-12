@@ -6,7 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import app.main as main_module
-from app.core.config import settings
+from app.infrastructure.config import settings
 
 DOC_PATHS = ("/docs", "/redoc", "/openapi.json")
 

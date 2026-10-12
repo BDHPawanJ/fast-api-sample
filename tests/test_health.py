@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.core.config import settings
-from app.db.session import get_db
+from app.infrastructure.config import settings
+from app.infrastructure.db.session import get_db
 from app.main import app
 
 
@@ -28,7 +28,9 @@ async def health_client():
 
     app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        # httpx 0.26's ASGI app type predates Starlette's; runtime-compatible.
+        transport=ASGITransport(app=app),  # pyright: ignore[reportArgumentType]
+        base_url="http://test",
     ) as client:
         yield client, fake_db
     app.dependency_overrides.clear()

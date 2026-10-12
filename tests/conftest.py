@@ -1,23 +1,24 @@
 """Pytest fixtures and configuration for tests."""
 
 import asyncio
+from decimal import Decimal
 from typing import AsyncGenerator, Generator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.core.config import settings
-from app.core.security import create_access_token
-from app.db.base import Base
-from app.db.session import get_db
+from app.api.auth import create_access_token
+from app.application.auth import register_user
+from app.domain.product import Product
+from app.domain.user import User
+from app.infrastructure.config import settings
+from app.infrastructure.db.base import Base
+from app.infrastructure.db.session import get_db
+from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from app.infrastructure.security.password import BcryptPasswordHasher
 from app.main import app
-from app.models.product import Product
-from app.models.user import User
-from app.schemas.user import UserCreate
-from app.services.auth_service import register_user
 
 # Test database URL
 TEST_DATABASE_URL = settings.TEST_DATABASE_URL or settings.DATABASE_URL.replace(
@@ -32,7 +33,7 @@ test_engine = create_async_engine(
 )
 
 # Create test session factory
-TestSessionLocal = sessionmaker(
+TestSessionLocal = async_sessionmaker(
     test_engine,
     class_=AsyncSession,
     expire_on_commit=False,
@@ -84,7 +85,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = override_get_db
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        # httpx 0.26's ASGI app type predates Starlette's; runtime-compatible.
+        transport=ASGITransport(app=app),  # pyright: ignore[reportArgumentType]
+        base_url="http://test",
     ) as ac:
         yield ac
 
@@ -92,22 +95,28 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-async def test_user(db_session: AsyncSession) -> User:
+def uow(db_session: AsyncSession) -> SqlAlchemyUnitOfWork:
+    """Unit of work over the test session, for seeding data and repo tests."""
+    return SqlAlchemyUnitOfWork(db_session)
+
+
+@pytest.fixture
+async def test_user(uow: SqlAlchemyUnitOfWork) -> User:
     """
     Create a test user in the database.
 
     Args:
-        db_session: Test database session
+        uow: Unit of work over the test session
 
     Returns:
         Created User object
     """
-    user_data = UserCreate(
+    return await register_user(
+        uow,
+        BcryptPasswordHasher(),
         email="test@example.com",
         password="TestPassword123",
     )
-    user = await register_user(db_session, user_data)
-    return user
 
 
 @pytest.fixture
@@ -142,12 +151,12 @@ async def auth_headers(test_token: str) -> dict:
 
 
 @pytest.fixture
-async def test_product(db_session: AsyncSession) -> Product:
+async def test_product(uow: SqlAlchemyUnitOfWork) -> Product:
     """
     Create a test product in the database.
 
     Args:
-        db_session: Test database session
+        uow: Unit of work over the test session
 
     Returns:
         Created Product object
@@ -155,22 +164,22 @@ async def test_product(db_session: AsyncSession) -> Product:
     product = Product(
         name="Test Laptop",
         description="A high-performance test laptop",
-        price=999.99,
+        price=Decimal("999.99"),
         stock=50,
     )
-    db_session.add(product)
-    await db_session.commit()
-    await db_session.refresh(product)
+    async with uow:
+        await uow.products.add(product)
+        await uow.commit()
     return product
 
 
 @pytest.fixture
-async def test_products(db_session: AsyncSession) -> list[Product]:
+async def test_products(uow: SqlAlchemyUnitOfWork) -> list[Product]:
     """
     Create multiple test products in the database.
 
     Args:
-        db_session: Test database session
+        uow: Unit of work over the test session
 
     Returns:
         List of created Product objects
@@ -179,18 +188,15 @@ async def test_products(db_session: AsyncSession) -> list[Product]:
         Product(
             name=f"Test Product {i}",
             description=f"Description for test product {i}",
-            price=float(100 * i),
+            price=Decimal(100 * i),
             stock=10 * i,
         )
         for i in range(1, 6)
     ]
 
-    for product in products:
-        db_session.add(product)
-
-    await db_session.commit()
-
-    for product in products:
-        await db_session.refresh(product)
+    async with uow:
+        for product in products:
+            await uow.products.add(product)
+        await uow.commit()
 
     return products

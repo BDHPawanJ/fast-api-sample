@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.core.config import Settings
+from app.infrastructure.config import Settings
 
 
 def test_parse_cors_origins_from_string():
@@ -39,7 +39,8 @@ def test_environment_properties():
 
 def test_debug_and_docs_default_to_disabled():
     """DEBUG and DOCS_ENABLED should be off unless explicitly enabled."""
-    cfg = Settings(_env_file=None)
+    # _env_file is a pydantic-settings init option missing from the typed signature.
+    cfg = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
     assert cfg.DEBUG is False
     assert cfg.DOCS_ENABLED is False
 

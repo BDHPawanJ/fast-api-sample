@@ -39,7 +39,7 @@ known-first-party = ["app"]
 [tool.datamodel-codegen]
 input = "openapi.yaml"
 input-file-type = "openapi"
-output = "app/schemas/generated.py"
+output = "app/api/schemas/generated.py"
 output-model-type = "pydantic_v2.BaseModel"
 target-python-version = "3.13"
 # Inline constrained types (constr, conint, ...) instead of RootModel
@@ -92,9 +92,46 @@ skip_covered = false
 dev = [
     "datamodel-code-generator>=0.83.0",
     "httpx==0.26.0",
+    "import-linter>=2.15",
+    "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "pyyaml>=6.0.3",
     "ruff>=0.16.10",
+]
+
+[tool.pyright]
+include = ["app", "tests"]
+# Generated from openapi.yaml; pydantic's constr()/conint() are not valid type
+# expressions for static checkers.
+exclude = ["app/api/schemas/generated.py"]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
+
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers only import inward"
+type = "layers"
+layers = [
+    "app.api",
+    "app.infrastructure",
+    "app.application",
+    "app.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain and application stay framework-free"
+type = "forbidden"
+source_modules = ["app.domain", "app.application"]
+forbidden_modules = [
+    "sqlalchemy",
+    "fastapi",
+    "starlette",
+    "pydantic",
+    "passlib",
+    "jose",
 ]

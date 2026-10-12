@@ -10,15 +10,15 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import the app configuration and models
-from app.core.config import settings
-from app.db.base import Base
+from app.infrastructure.config import settings
+from app.infrastructure.db.base import Base
 
 # Import all models here to ensure they're registered with Base
-from app.models.base import BaseModel  # noqa: F401
-from app.models.user import User  # noqa: F401
-from app.models.product import Product  # noqa: F401
-from app.models.idempotency_key import IdempotencyKey # noqa: F401
-from app.models.shopping_cart import ShoppingCart, CartItem # noqa: F401
+from app.infrastructure.db.models.base import BaseModel  # noqa: F401
+from app.infrastructure.db.models.user import User  # noqa: F401
+from app.infrastructure.db.models.product import Product  # noqa: F401
+from app.infrastructure.db.models.idempotency_key import IdempotencyKey # noqa: F401
+from app.infrastructure.db.models.shopping_cart import ShoppingCart, CartItem # noqa: F401
 
 # This is the Alembic Config object
 config = context.config

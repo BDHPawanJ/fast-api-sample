@@ -5,10 +5,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
+from app.api.deps import get_db
 from app.api.openapi import problem_responses
-from app.core.config import settings
-from app.db.session import get_db
-from app.schemas.generated import (
+from app.api.problem import problem_response
+from app.api.schemas.generated import (
     ApplicationHealthDetail,
     ConfigurationHealthDetail,
     DatabaseHealth,
@@ -16,7 +16,7 @@ from app.schemas.generated import (
     DetailedHealth,
     HealthStatus,
 )
-from app.utils.problem import problem_response
+from app.infrastructure.config import settings
 
 router = APIRouter(prefix="/health", tags=["Health"])
 

@@ -4,26 +4,21 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import create_access_token, get_current_user
+from app.api.constants import APIMessages, HTTPStatusCodes
+from app.api.deps import get_password_hasher, get_uow
 from app.api.openapi import problem_responses
-from app.constants import APIMessages, HTTPStatusCodes
-from app.core.config import settings
-from app.core.security import create_access_token
-from app.db.session import get_db
-from app.dependencies.auth import get_current_user
-from app.models.user import User
-from app.schemas.generated import LoginResponse, UserResource
-from app.schemas.user import UserCreate, UserLogin
-from app.services.auth_service import authenticate_user, register_user
-from app.services.idempotency_service import (
-    decode_response_body,
-    get_idempotency_record,
-    request_hash,
-    save_idempotency_record,
-)
-from app.utils.problem import problem_response
-from app.utils.serialization import user_resource
+from app.api.problem import problem_response
+from app.api.schemas.generated import LoginResponse, UserResource
+from app.api.schemas.user import UserCreate, UserLogin
+from app.api.serialization import user_resource
+from app.application.auth import authenticate_user, register_user
+from app.application.idempotency import Outcome, run_idempotent
+from app.application.ports import PasswordHasher, UnitOfWork
+from app.domain.errors import EmailAlreadyRegistered
+from app.domain.user import User
+from app.infrastructure.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -37,64 +32,45 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     description="Create a new user account with email and password",
 )
 async def register(
-    request: Request,
     user_data: UserCreate,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
+    hasher: PasswordHasher = Depends(get_password_hasher),
 ):
     """
     Register a new user account and return the created user resource.
 
     Args:
-        request: Incoming HTTP request.
         user_data: Incoming user registration payload.
         idempotency_key: Required idempotency key for retry-safe POST.
-        db: Active database session dependency.
+        uow: Unit of work.
+        hasher: Password hasher.
 
     Returns:
         UserResource: Created user resource.
     """
-    payload_hash = request_hash(user_data.model_dump())
-    record = await get_idempotency_record(
-        db,
-        key=idempotency_key,
-        operation="auth.register",
-        principal_id=None,
-    )
-    if record:
-        if record.request_hash != payload_hash:
-            return problem_response(
-                status=HTTPStatusCodes.CONFLICT,
-                type_uri="https://api.fastapi-sample.local/problems/idempotency-key-reused",
-                title="Idempotency key reuse conflict",
-                detail="The same Idempotency-Key was reused with a different payload.",
-                instance=request.url.path,
-                code="IDEMPOTENCY_KEY_PAYLOAD_MISMATCH",
-                trace_id=getattr(request.state, "request_id", "n/a"),
-            )
-        return JSONResponse(
-            status_code=record.response_status,
-            content=decode_response_body(record.response_body),
+
+    async def register_and_render() -> Outcome:
+        new_user = await register_user(
+            uow, hasher, email=user_data.email, password=user_data.password
         )
+        return HTTPStatusCodes.CREATED, user_resource(new_user).model_dump(mode="json")
 
     try:
-        new_user = await register_user(db, user_data)
-        body = user_resource(new_user)
-        await save_idempotency_record(
-            db,
+        result = await run_idempotent(
+            uow,
             key=idempotency_key,
             operation="auth.register",
             principal_id=None,
-            request_body_hash=payload_hash,
-            response_status=HTTPStatusCodes.CREATED,
-            response_body=body.model_dump(mode="json"),
+            payload=user_data.model_dump(),
+            action=register_and_render,
         )
-        return body
-    except ValueError:
+    except EmailAlreadyRegistered:
         raise HTTPException(
             status_code=HTTPStatusCodes.CONFLICT,
             detail=APIMessages.EMAIL_ALREADY_EXISTS,
         )
+    return JSONResponse(status_code=result.status, content=result.body)
 
 
 @router.post(
@@ -107,19 +83,21 @@ async def register(
 )
 async def login(
     credentials: UserLogin,
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
+    hasher: PasswordHasher = Depends(get_password_hasher),
 ):
     """
     Authenticate a user and return token plus user resource.
 
     Args:
         credentials: Login credentials containing email and password.
-        db: Active database session dependency.
+        uow: Unit of work.
+        hasher: Password hasher.
 
     Returns:
         LoginResponse: JWT token payload and user resource.
     """
-    user = await authenticate_user(db, credentials.email, credentials.password)
+    user = await authenticate_user(uow, hasher, credentials.email, credentials.password)
     if not user:
         raise HTTPException(
             status_code=HTTPStatusCodes.UNAUTHORIZED,

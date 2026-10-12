@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.models.product import Product
+from app.domain.product import Product
 
 MISSING_PRODUCT_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -97,6 +97,34 @@ class TestProductEndpoints:
         assert response.status_code == 422
         fields = [error["field"] for error in response.json()["errors"]]
         assert "body -> price" in fields
+
+    async def test_create_product_price_is_exact(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """A price float cannot represent exactly comes back unchanged."""
+        response = await client.post(
+            "/v1/products",
+            json={"name": "Cable", "price": 0.1, "stock": 1},
+            headers=idempotency_headers(auth_headers),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["price"] == 0.1
+        fetched = await client.get(f"/v1/products/{response.json()['product_id']}")
+        assert fetched.json()["price"] == 0.1
+
+    async def test_create_product_price_too_large(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Prices beyond DECIMAL(10, 2) are a 422, not a database error."""
+        response = await client.post(
+            "/v1/products",
+            json={"name": "Yacht", "price": 1e9, "stock": 1},
+            headers=idempotency_headers(auth_headers),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "INVALID_PRODUCT"
 
     async def test_create_product_invalid_stock(
         self, client: AsyncClient, auth_headers: dict
@@ -208,6 +236,21 @@ class TestProductEndpoints:
         assert data["price"] == 899.99
         assert data["stock"] == test_product.stock
         assert "etag" in response.headers
+
+    async def test_update_product_null_name_violates_invariant(
+        self, client: AsyncClient, test_product: Product, auth_headers: dict
+    ):
+        """Explicit null for a required field is rejected by the domain."""
+        etag = await get_etag(client, test_product.public_id)
+
+        response = await client.patch(
+            f"/v1/products/{test_product.public_id}",
+            json={"name": None},
+            headers={**auth_headers, "If-Match": etag},
+        )
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "INVALID_PRODUCT"
 
     async def test_update_product_stale_etag(
         self, client: AsyncClient, test_product: Product, auth_headers: dict

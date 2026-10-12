@@ -84,36 +84,45 @@ make format
 
 ---
 
-## 4) High-level architecture 
+## 4) High-level architecture
+
+Hexagonal ("ports and adapters") layout. Imports only point inward:
+
+```text
+api ─────────────┐
+                 ▼
+infrastructure ─► application ─► domain
+```
 
 ```text
 Client
-  -> FastAPI route
-     -> Dependency checks (auth, db session)
-        -> Service layer (business logic)
-           -> SQLAlchemy models + DB
-        -> Response serializers
+  -> FastAPI route (api)
+     -> Depends(): get_current_user, get_uow, get_password_hasher (api/deps.py)
+        -> Use case (application) talks to ports only
+           -> Domain entities enforce business rules (domain)
+           -> Repositories / UnitOfWork (infrastructure) map domain ⇄ ORM rows
+        -> Serializers turn domain objects into response models (api)
   -> JSON response
 ```
 
-Main technical layers:
-- **API routes**: HTTP endpoints and request/response handling
-- **Dependencies**: shared logic like authentication and DB session injection
-- **Services**: business logic and DB queries
-- **Models**: database tables
-- **Schemas**: request/response validation with Pydantic
-- **Utils**: helpers (cursor, ETag, problem response, logging)
+Layers:
+- **Domain** (`app/domain`): entities, invariants, domain errors. No framework imports.
+- **Application** (`app/application`): use cases and the ports (Protocols) they need.
+- **Infrastructure** (`app/infrastructure`): SQLAlchemy models, repositories, unit of work, bcrypt hasher, settings, logging.
+- **API** (`app/api`): routes, schemas, middleware, JWT auth, error handlers, and the composition root that wires adapters to ports.
+
+`make lint` enforces this: pyright checks that every adapter satisfies its port, and import-linter rejects imports that point outward.
 
 ---
 
 ## 5) Startup flow (what happens when app starts)
 
 1. Uvicorn imports [app/main.py](../app/main.py).
-2. FastAPI app object is created with settings from [app/core/config.py](../app/core/config.py).
-3. Middlewares are registered via [app/core/middleware.py](../app/core/middleware.py).
-4. Global exception handlers are registered via [app/api/handlers/errors.py](../app/api/handlers/errors.py).
+2. FastAPI app object is created with settings from [app/infrastructure/config.py](../app/infrastructure/config.py).
+3. Middlewares are registered via [app/api/middleware/__init__.py](../app/api/middleware/__init__.py).
+4. Global exception handlers are registered via [app/api/errors.py](../app/api/errors.py).
 5. Versioned router (`/v1`) is attached from [app/api/v1/router.py](../app/api/v1/router.py).
-6. Lifespan startup runs [app/core/lifespan.py](../app/core/lifespan.py), which initializes DB connectivity from [app/db/session.py](../app/db/session.py).
+6. Lifespan startup runs [app/api/lifespan.py](../app/api/lifespan.py), which initializes DB connectivity from [app/infrastructure/db/session.py](../app/infrastructure/db/session.py).
 
 ---
 
@@ -123,38 +132,38 @@ Main technical layers:
 
 Path in code:
 1. Route: [app/api/routes/auth.py](../app/api/routes/auth.py)
-2. Idempotency key handling: [app/services/idempotency_service.py](../app/services/idempotency_service.py)
-3. Business logic: [app/services/auth_service.py](../app/services/auth_service.py)
-4. Password hashing/JWT helpers: [app/core/security.py](../app/core/security.py)
-5. User model table: [app/models/user.py](../app/models/user.py)
-6. Output shaping: [app/utils/serialization.py](../app/utils/serialization.py)
+2. Idempotency key handling: [app/application/idempotency.py](../app/application/idempotency.py)
+3. Use case: [app/application/auth.py](../app/application/auth.py)
+4. Password hashing adapter: [app/infrastructure/security/password.py](../app/infrastructure/security/password.py)
+5. Persistence: [app/infrastructure/db/repositories/user.py](../app/infrastructure/db/repositories/user.py) → [app/infrastructure/db/models/user.py](../app/infrastructure/db/models/user.py)
+6. Output shaping: [app/api/serialization.py](../app/api/serialization.py)
 
 ### B) Login: `POST /v1/auth/login`
 
 1. Route validates credentials schema.
-2. Service verifies email + password.
-3. Route creates JWT token and returns token + user resource.
+2. Use case verifies email + password through the `PasswordHasher` port.
+3. Route creates JWT token ([app/api/auth.py](../app/api/auth.py)) and returns token + user resource.
 
 ### C) Create product: `POST /v1/products`
 
 1. Route: [app/api/routes/products.py](../app/api/routes/products.py)
-2. Auth dependency validates bearer token: [app/dependencies/auth.py](../app/dependencies/auth.py)
-3. Product service creates row: [app/services/product_service.py](../app/services/product_service.py)
-4. Product model: [app/models/product.py](../app/models/product.py)
+2. Auth dependency validates bearer token: [app/api/auth.py](../app/api/auth.py)
+3. Use case builds a domain `Product` and adds it: [app/application/products.py](../app/application/products.py)
+4. Repository persists it: [app/infrastructure/db/repositories/product.py](../app/infrastructure/db/repositories/product.py)
 5. Idempotency record saved for retry-safe POST.
 
 ### D) List products: `GET /v1/products`
 
 1. Route parses `limit`, `cursor`, `search`.
-2. Cursor is decoded/encoded by [app/utils/cursor.py](../app/utils/cursor.py).
-3. Service queries products using `id` cursor.
+2. Cursor is decoded/encoded by [app/api/pagination.py](../app/api/pagination.py).
+3. Use case queries products using `id` cursor.
 4. Response returns `items`, `next_cursor`, `has_more`.
 
 ### E) Update product: `PATCH /v1/products/{product_id}`
 
 1. Route checks `If-Match` header (ETag optimistic concurrency).
-2. ETag helper from [app/utils/serialization.py](../app/utils/serialization.py).
-3. Service applies partial update and commits.
+2. ETag helper from [app/api/serialization.py](../app/api/serialization.py).
+3. Use case applies the partial update via `Product.update_details` (invariants enforced) and commits.
 
 ---
 
@@ -163,6 +172,7 @@ Path in code:
 ### Entrypoint and composition
 - [app/main.py](../app/main.py): application entrypoint, app creation, middleware, handlers, router include
 - [app/api/v1/router.py](../app/api/v1/router.py): collects route modules
+- [app/api/deps.py](../app/api/deps.py): composition root; builds the unit of work and password hasher for `Depends()`
 
 ### API endpoints
 - [app/api/routes/auth.py](../app/api/routes/auth.py): register/login/me
@@ -170,35 +180,37 @@ Path in code:
 - [app/api/routes/health.py](../app/api/routes/health.py): app and DB health checks
 
 ### Shared runtime behavior
-- [app/core/config.py](../app/core/config.py): environment and app settings
-- [app/core/lifespan.py](../app/core/lifespan.py): startup/shutdown hooks
-- [app/core/middleware.py](../app/core/middleware.py): CORS and custom middleware setup
-- [app/middleware/logging.py](../app/middleware/logging.py): request ID logging and timing headers
-- [app/api/handlers/errors.py](../app/api/handlers/errors.py): standard error response conversion
+- [app/infrastructure/config.py](../app/infrastructure/config.py): environment and app settings
+- [app/api/lifespan.py](../app/api/lifespan.py): startup/shutdown hooks
+- [app/api/middleware/__init__.py](../app/api/middleware/__init__.py): CORS and custom middleware setup
+- [app/api/middleware/logging.py](../app/api/middleware/logging.py): request ID logging and timing headers
+- [app/api/errors.py](../app/api/errors.py): standard error response conversion, including domain errors
+
+### Domain and use cases
+- [app/domain/](../app/domain): `Product`, `User`, `Cart` entities and domain errors
+- [app/application/ports.py](../app/application/ports.py): repository, `UnitOfWork` and `PasswordHasher` Protocols
+- [app/application/auth.py](../app/application/auth.py): register/authenticate users
+- [app/application/products.py](../app/application/products.py): product operations
+- [app/application/cart.py](../app/application/cart.py): cart operations
+- [app/application/idempotency.py](../app/application/idempotency.py): request replay safety
 
 ### Data and persistence
-- [app/db/base.py](../app/db/base.py): SQLAlchemy declarative base
-- [app/db/session.py](../app/db/session.py): async engine/session dependency
-- [app/models/base.py](../app/models/base.py): common model fields
-- [app/models/user.py](../app/models/user.py): users table
-- [app/models/product.py](../app/models/product.py): products table
-- [app/models/idempotency_key.py](../app/models/idempotency_key.py): idempotency table
-
-### Business logic
-- [app/services/auth_service.py](../app/services/auth_service.py): register/authenticate users
-- [app/services/product_service.py](../app/services/product_service.py): product operations
-- [app/services/idempotency_service.py](../app/services/idempotency_service.py): request replay safety
+- [app/infrastructure/db/base.py](../app/infrastructure/db/base.py): SQLAlchemy declarative base
+- [app/infrastructure/db/session.py](../app/infrastructure/db/session.py): async engine/session dependency
+- [app/infrastructure/db/models/](../app/infrastructure/db/models): ORM tables (users, products, carts, idempotency keys)
+- [app/infrastructure/db/repositories/](../app/infrastructure/db/repositories): ORM row ⇄ domain object mapping
+- [app/infrastructure/db/unit_of_work.py](../app/infrastructure/db/unit_of_work.py): transaction boundary
 
 ### Contracts and response shapes
 - [openapi.yaml](../openapi.yaml): OpenAPI contract, the source of truth
-- [app/schemas/generated.py](../app/schemas/generated.py): request and response models generated from `openapi.yaml` by `make schemas` (options in `[tool.datamodel-codegen]` in [pyproject.toml](../pyproject.toml))
-- [app/schemas/user.py](../app/schemas/user.py), [app/schemas/product.py](../app/schemas/product.py): subclasses adding custom request validation
-- [app/utils/serialization.py](../app/utils/serialization.py): ORM model to response model mapping + ETag
-- [app/utils/problem.py](../app/utils/problem.py): RFC 7807 problem response helper
+- [app/api/schemas/generated.py](../app/api/schemas/generated.py): request and response models generated from `openapi.yaml` by `make schemas` (options in `[tool.datamodel-codegen]` in [pyproject.toml](../pyproject.toml))
+- [app/api/schemas/user.py](../app/api/schemas/user.py), [app/api/schemas/product.py](../app/api/schemas/product.py): subclasses adding custom request validation
+- [app/api/serialization.py](../app/api/serialization.py): domain object to response model mapping + ETag
+- [app/api/problem.py](../app/api/problem.py): RFC 7807 problem response helper
 
 ### Tests and migrations
 - [tests/conftest.py](../tests/conftest.py): async test fixtures and DB override
-- [tests/](../tests): route/service/security/config tests
+- [tests/](../tests): domain, use case (with fakes), repository, route and config tests
 - [alembic/env.py](../alembic/env.py): migration runtime setup
 - [alembic/versions/](../alembic/versions): schema history
 

@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-from app.schemas.generated import ProblemDetails
+from app.api.schemas.generated import ProblemDetails
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 

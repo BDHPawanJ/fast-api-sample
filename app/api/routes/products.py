@@ -4,32 +4,27 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_user
+from app.api.constants import APIMessages, HTTPStatusCodes
+from app.api.deps import get_uow
 from app.api.openapi import problem_responses
-from app.constants import APIMessages, HTTPStatusCodes
-from app.core.config import settings
-from app.db.session import get_db
-from app.dependencies.auth import get_current_user
-from app.models.user import User
-from app.schemas.generated import ProductPage, ProductResource
-from app.schemas.product import ProductCreate, ProductUpdate
-from app.services.idempotency_service import (
-    decode_response_body,
-    get_idempotency_record,
-    request_hash,
-    save_idempotency_record,
-)
-from app.services.product_service import (
+from app.api.pagination import decode_cursor, encode_cursor
+from app.api.problem import problem_response
+from app.api.schemas.generated import ProductPage, ProductResource
+from app.api.schemas.product import ProductCreate, ProductUpdate
+from app.api.serialization import make_etag, product_resource
+from app.application.idempotency import Outcome, run_idempotent
+from app.application.ports import UnitOfWork
+from app.application.products import (
     create_product,
     delete_product,
     get_product_by_public_id,
     get_products_by_cursor,
     update_product,
 )
-from app.utils.cursor import decode_cursor, encode_cursor
-from app.utils.problem import problem_response
-from app.utils.serialization import make_etag, product_resource
+from app.domain.user import User
+from app.infrastructure.config import settings
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -43,60 +38,39 @@ router = APIRouter(prefix="/products", tags=["Products"])
     description="Create a new product (requires authentication)",
 )
 async def create_new_product(
-    request: Request,
     product_data: ProductCreate,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Create a new product.
 
     Args:
-        request: Incoming HTTP request.
         product_data: Product creation payload.
         idempotency_key: Required idempotency key for retry-safe POST.
         current_user: Current authenticated user.
-        db: Database session.
+        uow: Unit of work.
 
     Returns:
         ProductResource: Created product resource.
     """
-    payload_hash = request_hash(product_data.model_dump())
-    record = await get_idempotency_record(
-        db,
-        key=idempotency_key,
-        operation="products.create",
-        principal_id=current_user.public_id,
-    )
-    if record:
-        if record.request_hash != payload_hash:
-            return problem_response(
-                status=HTTPStatusCodes.CONFLICT,
-                type_uri="https://api.fastapi-sample.local/problems/idempotency-key-reused",
-                title="Idempotency key reuse conflict",
-                detail="The same Idempotency-Key was reused with a different payload.",
-                instance=request.url.path,
-                code="IDEMPOTENCY_KEY_PAYLOAD_MISMATCH",
-                trace_id=getattr(request.state, "request_id", "n/a"),
-            )
-        return JSONResponse(
-            status_code=record.response_status,
-            content=decode_response_body(record.response_body),
+
+    async def create_and_render() -> Outcome:
+        new_product = await create_product(uow, **product_data.to_create_args())
+        return HTTPStatusCodes.CREATED, product_resource(new_product).model_dump(
+            mode="json"
         )
 
-    new_product = await create_product(db, product_data)
-    body = product_resource(new_product)
-    await save_idempotency_record(
-        db,
+    result = await run_idempotent(
+        uow,
         key=idempotency_key,
         operation="products.create",
         principal_id=current_user.public_id,
-        request_body_hash=payload_hash,
-        response_status=HTTPStatusCodes.CREATED,
-        response_body=body.model_dump(mode="json"),
+        payload=product_data.model_dump(),
+        action=create_and_render,
     )
-    return body
+    return JSONResponse(status_code=result.status, content=result.body)
 
 
 @router.get(
@@ -121,7 +95,7 @@ async def list_products(
         max_length=100,
         description="Search query for product name or description",
     ),
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Retrieve products using cursor pagination.
@@ -130,7 +104,7 @@ async def list_products(
         limit: Page size.
         cursor: Opaque cursor token.
         search: Optional search query.
-        db: Database session.
+        uow: Unit of work.
 
     Returns:
         ProductPage: Cursor pagination envelope with items and next cursor.
@@ -145,16 +119,15 @@ async def list_products(
             )
 
     rows = await get_products_by_cursor(
-        db,
+        uow,
         limit=limit + 1,
         cursor_last_id=last_seen_id,
         search=search,
     )
     has_more = len(rows) > limit
     visible_rows = rows[:limit]
-    next_cursor = (
-        encode_cursor(visible_rows[-1].id) if has_more and visible_rows else None
-    )
+    last_id = visible_rows[-1].id if has_more and visible_rows else None
+    next_cursor = encode_cursor(last_id) if last_id is not None else None
 
     return ProductPage(
         items=[product_resource(row) for row in visible_rows],
@@ -174,7 +147,7 @@ async def list_products(
 async def get_product(
     product_id: str,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Get a single product by public UUID.
@@ -182,12 +155,12 @@ async def get_product(
     Args:
         product_id: Product UUID identifier.
         response: Outgoing response used to set the ETag header.
-        db: Database session.
+        uow: Unit of work.
 
     Returns:
         ProductResource: Product resource representation.
     """
-    product = await get_product_by_public_id(db, product_id)
+    product = await get_product_by_public_id(uow, product_id)
     if not product:
         raise HTTPException(
             status_code=HTTPStatusCodes.NOT_FOUND,
@@ -213,7 +186,7 @@ async def update_existing_product(
     product_data: ProductUpdate,
     if_match: str = Header(..., alias="If-Match"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Partially update an existing product using optimistic concurrency.
@@ -225,12 +198,12 @@ async def update_existing_product(
         product_data: Product update payload.
         if_match: Expected entity tag from latest resource retrieval.
         current_user: Current authenticated user.
-        db: Database session.
+        uow: Unit of work.
 
     Returns:
         ProductResource: Updated product resource.
     """
-    existing = await get_product_by_public_id(db, product_id)
+    existing = await get_product_by_public_id(uow, product_id)
     if not existing:
         raise HTTPException(
             status_code=HTTPStatusCodes.NOT_FOUND,
@@ -249,7 +222,7 @@ async def update_existing_product(
             trace_id=getattr(request.state, "request_id", "n/a"),
         )
 
-    updated_product = await update_product(db, product_id, product_data)
+    updated_product = await update_product(uow, product_id, product_data.to_changes())
     if not updated_product:
         raise HTTPException(
             status_code=HTTPStatusCodes.NOT_FOUND,
@@ -272,7 +245,7 @@ async def update_existing_product(
 async def delete_existing_product(
     product_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Delete a product by public UUID.
@@ -280,12 +253,12 @@ async def delete_existing_product(
     Args:
         product_id: Product UUID identifier.
         current_user: Current authenticated user.
-        db: Database session.
+        uow: Unit of work.
 
     Returns:
         Response: Empty response with HTTP 204 on success.
     """
-    success = await delete_product(db, product_id)
+    success = await delete_product(uow, product_id)
     if not success:
         raise HTTPException(
             status_code=HTTPStatusCodes.NOT_FOUND,

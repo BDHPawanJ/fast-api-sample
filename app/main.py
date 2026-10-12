@@ -3,13 +3,15 @@
 from fastapi import FastAPI
 from fastapi.openapi.docs import get_redoc_html
 
-from app.api.handlers.errors import register_exception_handlers
+from app.api.errors import register_exception_handlers
+from app.api.lifespan import app_lifespan
+from app.api.middleware import configure_middlewares
 from app.api.openapi import build_openapi
+from app.api.schemas.generated import RootInfo
 from app.api.v1.router import api_v1_router
-from app.core.config import settings
-from app.core.lifespan import app_lifespan
-from app.core.middleware import configure_middlewares
-from app.schemas.generated import RootInfo
+from app.infrastructure.config import settings
+
+OPENAPI_URL = "/openapi.json"
 
 # API docs are opt-in via DOCS_ENABLED and always off in production (see Settings).
 app = FastAPI(
@@ -18,7 +20,7 @@ app = FastAPI(
     description="FastAPI service with JWT auth and product APIs.",
     docs_url="/docs" if settings.DOCS_ENABLED else None,
     redoc_url=None,
-    openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
+    openapi_url=OPENAPI_URL if settings.DOCS_ENABLED else None,
     debug=settings.DEBUG,
     lifespan=app_lifespan,
 )
@@ -37,7 +39,7 @@ if settings.DOCS_ENABLED:
     async def redoc_html():
         """Serve ReDoc with a pinned stable JavaScript bundle URL."""
         return get_redoc_html(
-            openapi_url=app.openapi_url,
+            openapi_url=OPENAPI_URL,
             title=f"{settings.APP_NAME} - ReDoc",
             redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js",
         )

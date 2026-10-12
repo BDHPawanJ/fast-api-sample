@@ -86,11 +86,10 @@ python manage.py migrate
 
 ```
 app/
-├── api/routes/      # Route handlers
-├── core/            # Config, security
-├── models/          # Database models
-├── schemas/         # Pydantic schemas
-├── services/        # Business logic
+├── domain/          # Entities and business rules (no frameworks)
+├── application/     # Use cases + ports (Protocols)
+├── infrastructure/  # DB models, repositories, hashing, config
+├── api/             # Routes, schemas, middleware, DI wiring
 └── main.py          # Application entry
 ```
 

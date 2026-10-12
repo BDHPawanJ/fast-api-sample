@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.models.user import User
+from app.domain.user import User
 
 
 def idempotency_headers() -> dict:

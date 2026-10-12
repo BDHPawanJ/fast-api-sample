@@ -40,50 +40,56 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 
 ```
 fastapi_sample/
-├── app/
-│   ├── api/
-│   │   ├── openapi.py       # OpenAPI helpers (Problem Details error responses)
-│   │   └── routes/          # API route handlers
-│   │       ├── auth.py      # Authentication endpoints
-│   │       ├── health.py    # Health check endpoints
-│   │       └── products.py  # Product CRUD endpoints
-│   ├── constants/
-│   │   └── messages.py      # API messages and status constants
-│   ├── core/
-│   │   ├── config.py        # Application configuration
-│   │   └── security.py      # Security utilities (JWT, hashing)
-│   ├── db/
-│   │   ├── base.py          # Database base configuration
-│   │   └── session.py       # Database session management
-│   ├── dependencies/
-│   │   └── auth.py          # FastAPI dependencies (auth)
-│   ├── middleware/          # Custom middleware
-│   ├── models/
-│   │   ├── base.py          # Base model with common fields
-│   │   ├── user.py          # User model
-│   │   └── product.py       # Product model
-│   ├── schemas/
-│   │   ├── generated.py     # Models generated from openapi.yaml (do not edit)
-│   │   ├── user.py          # User request schemas (extend generated models)
-│   │   └── product.py       # Product request schemas (extend generated models)
-│   ├── services/
-│   │   ├── auth_service.py  # Authentication business logic
-│   │   └── product_service.py # Product business logic
-│   ├── utils/
-│   │   ├── logger.py        # Logging configuration
+├── app/                     # Imports point inward only: api → infrastructure → application → domain
+│   ├── domain/              # Entities and business rules; pure Python, no frameworks
+│   │   ├── product.py       # Product invariants and stock helpers
+│   │   ├── user.py          # User account status
+│   │   ├── cart.py          # Shopping cart aggregate (quantity and stock rules)
+│   │   ├── idempotency.py   # Stored idempotent-request outcome
+│   │   └── errors.py        # Domain errors (mapped to 404/422 by the API)
+│   ├── application/         # Use cases; depend on domain + ports only
+│   │   ├── ports.py         # Protocols: repositories, UnitOfWork, PasswordHasher
+│   │   ├── unit_of_work.py  # Nested transactions: only the outermost block commits
+│   │   ├── errors.py        # ConcurrencyConflict, IdempotencyKeyReused
+│   │   ├── auth.py          # Register, authenticate, (de)activate users
+│   │   ├── products.py      # Product use cases
+│   │   ├── cart.py          # Cart use cases
+│   │   └── idempotency.py   # run_idempotent: action + record in one transaction
+│   ├── infrastructure/      # Adapters implementing the ports
+│   │   ├── config.py        # Settings (environment variables)
+│   │   ├── logging.py       # Logging setup
+│   │   ├── db/
+│   │   │   ├── base.py          # Declarative base
+│   │   │   ├── session.py       # Async engine and session
+│   │   │   ├── models/          # SQLAlchemy ORM models (Alembic target)
+│   │   │   ├── repositories/    # ORM row ⇄ domain object mapping
+│   │   │   └── unit_of_work.py  # Transaction boundary
+│   │   └── security/
+│   │       └── password.py  # Bcrypt PasswordHasher
+│   ├── api/                 # HTTP: FastAPI routes and everything request-shaped
+│   │   ├── routes/          # Auth, product and health endpoints
+│   │   ├── v1/router.py     # Versioned router composition
+│   │   ├── schemas/         # Generated contract models + request subclasses
+│   │   ├── middleware/      # Middleware registration, request logging/timing
+│   │   ├── deps.py          # Composition root: builds adapters for Depends()
+│   │   ├── auth.py          # JWT tokens and get_current_user
+│   │   ├── errors.py        # Exception handlers (Problem Details)
+│   │   ├── lifespan.py      # Startup/shutdown hooks
+│   │   ├── constants.py     # API messages and status codes
+│   │   ├── pagination.py    # Cursor encode/decode
 │   │   ├── problem.py       # Problem Details response helper
-│   │   ├── cursor.py        # Cursor encode/decode helper
-│   │   └── serialization.py # Resource serialization and ETag helper
+│   │   ├── serialization.py # Domain → response models, ETag
+│   │   └── openapi.py       # OpenAPI helpers
 │   └── main.py              # Application entry point
 ├── tests/
-│   ├── conftest.py          # Pytest fixtures
-│   ├── test_auth.py         # Authentication tests
-│   ├── test_auth_service.py # Auth service tests
-│   ├── test_health.py       # Health route tests
-│   ├── test_openapi.py      # OpenAPI contract tests
-│   ├── test_products.py     # Product route tests
-│   ├── test_product_service.py # Product service tests
-│   └── test_security.py     # Security utility tests
+│   ├── conftest.py          # Pytest fixtures (real DB + UoW seeding)
+│   ├── fakes.py             # In-memory ports: FakeUnitOfWork, FakePasswordHasher
+│   ├── helpers.py           # must(): narrow Optional lookups in assertions
+│   ├── test_domain.py       # Domain rules (no DB, no mocks)
+│   ├── test_*_service.py    # Use cases against fakes
+│   ├── test_repositories.py # Repositories against the test DB
+│   ├── test_auth.py, test_products.py, test_health.py # HTTP endpoint tests
+│   └── test_openapi.py      # OpenAPI contract tests
 ├── alembic/
 │   ├── versions/            # Migration files
 │   └── env.py               # Alembic configuration
@@ -92,7 +98,7 @@ fastapi_sample/
 │   ├── COMPARISON.md        # Framework comparison guide
 │   └── PROJECT.md           # Project explainer
 ├── .env                     # Local environment variables 
-├── Makefile                 # Schema generation, formatting and lint targets
+├── Makefile                 # Schema generation, formatting, lint/typecheck/layer targets
 ├── openapi.yaml             # OpenAPI contract (source of truth)
 ├── alembic.ini              # Alembic configuration
 ├── pyproject.toml           # Project metadata, dependencies and tool config
@@ -208,13 +214,13 @@ make lint     # check only, e.g. in CI
 ##  OpenAPI Contract and Generated Models
 
 `openapi.yaml` is the source of truth for the API. Every schema in it is
-generated into `app/schemas/generated.py` with
+generated into `app/api/schemas/generated.py` with
 [datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator).
 Never edit the generated file.
 
 - **Responses** (success and Problem Details errors) use the generated models directly.
-- **Requests** use thin subclasses in `app/schemas/user.py` and
-  `app/schemas/product.py` that add only logic the contract cannot express
+- **Requests** use thin subclasses in `app/api/schemas/user.py` and
+  `app/api/schemas/product.py` that add only logic the contract cannot express
   (password must contain a letter and a digit, prices are rounded to 2 decimals).
 
 ```bash

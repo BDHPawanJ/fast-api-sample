@@ -1,160 +1,98 @@
-"""Unit tests for auth service layer."""
-
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+"""Unit tests for auth use cases against an in-memory unit of work."""
 
 import pytest
 
-from app.models.user import User
-from app.schemas.user import UserCreate
-from app.services.auth_service import (
+from app.application.auth import (
     activate_user,
     authenticate_user,
     deactivate_user,
     get_user_by_email,
     get_user_by_id,
+    get_user_by_public_id,
     register_user,
 )
+from app.domain.errors import EmailAlreadyRegistered
+from app.domain.user import User
+from tests.fakes import FakePasswordHasher, FakeUnitOfWork
+from tests.helpers import must
 
-
-class _SingleResult:
-    """Simple SQLAlchemy-like result wrapper for one object."""
-
-    def __init__(self, value):
-        self._value = value
-
-    def scalar_one_or_none(self):
-        return self._value
-
-
-def _mock_db():
-    """Create mocked async DB session."""
-    return SimpleNamespace(
-        execute=AsyncMock(),
-        add=MagicMock(),
-        commit=AsyncMock(),
-        refresh=AsyncMock(),
-        rollback=AsyncMock(),
-    )
+hasher = FakePasswordHasher()
 
 
 @pytest.mark.asyncio
 class TestAuthService:
     """Auth service behavior tests."""
 
-    async def test_get_user_by_email_and_id(self):
-        """Should return user from query helpers."""
-        db = _mock_db()
-        user = User(email="service@example.com", hashed_password="hash", is_active=True)
-        user.id = 10
-        db.execute.side_effect = [_SingleResult(user), _SingleResult(user)]
+    async def test_lookups(self):
+        """Should find users by email, id, and public id."""
+        user = User(email="service@example.com", hashed_password="hash")
+        uow = FakeUnitOfWork(users=[user])
 
-        found_by_email = await get_user_by_email(db, "service@example.com")
-        found_by_id = await get_user_by_id(db, 10)
+        assert must(await get_user_by_email(uow, user.email)).id == user.id
+        assert must(await get_user_by_id(uow, must(user.id))).email == user.email
+        assert must(await get_user_by_public_id(uow, user.public_id)).id == user.id
+        assert await get_user_by_email(uow, "missing@example.com") is None
 
-        assert found_by_email is user
-        assert found_by_id is user
-
-    async def test_register_user_success(self, monkeypatch: pytest.MonkeyPatch):
-        """Should register a new user when email is not present."""
-        db = _mock_db()
-        monkeypatch.setattr(
-            "app.services.auth_service.get_user_by_email",
-            AsyncMock(return_value=None),
-        )
-
-        async def set_id(user):
-            user.id = 1
-
-        db.refresh.side_effect = set_id
+    async def test_register_user_success(self):
+        """Should store a new user with a hashed password."""
+        uow = FakeUnitOfWork()
 
         user = await register_user(
-            db,
-            UserCreate(email="new-service@example.com", password="ServicePass123"),
+            uow, hasher, email="new@example.com", password="ServicePass123"
         )
 
-        assert user.email == "new-service@example.com"
-        assert user.id == 1
-        db.add.assert_called_once()
-        db.commit.assert_awaited_once()
+        assert user.id is not None
+        assert user.is_active is True
+        assert hasher.verify("ServicePass123", user.hashed_password)
+        assert uow.commits == 1
 
-    async def test_register_duplicate_email_raises_value_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """Duplicate email should raise ValueError."""
-        db = _mock_db()
-        existing_user = User(
-            email="dup@example.com",
-            hashed_password="hash",
-            is_active=True,
-        )
-        monkeypatch.setattr(
-            "app.services.auth_service.get_user_by_email",
-            AsyncMock(return_value=existing_user),
+    async def test_register_duplicate_email_raises(self):
+        """Duplicate email should raise and not commit."""
+        uow = FakeUnitOfWork(
+            users=[User(email="dup@example.com", hashed_password="hash")]
         )
 
-        with pytest.raises(ValueError):
+        with pytest.raises(EmailAlreadyRegistered):
             await register_user(
-                db,
-                UserCreate(email="dup@example.com", password="StrongPass123"),
+                uow, hasher, email="dup@example.com", password="StrongPass123"
             )
+        assert not uow.committed
 
-        db.commit.assert_not_awaited()
-
-    async def test_authenticate_user_paths(self, monkeypatch: pytest.MonkeyPatch):
-        """Should validate success, wrong password, and inactive cases."""
-        db = _mock_db()
-        active_user = User(
-            email="auth@example.com",
-            hashed_password="hash",
-            is_active=True,
-        )
-        active_user.id = 2
-        inactive_user = User(
-            email="inactive@example.com",
-            hashed_password="hash",
-            is_active=False,
+    async def test_authenticate_user_paths(self):
+        """Should validate success, wrong password, unknown, and inactive cases."""
+        hashed = hasher.hash("AuthPass123")
+        uow = FakeUnitOfWork(
+            users=[
+                User(email="auth@example.com", hashed_password=hashed),
+                User(
+                    email="inactive@example.com",
+                    hashed_password=hashed,
+                    is_active=False,
+                ),
+            ]
         )
 
-        monkeypatch.setattr(
-            "app.services.auth_service.get_user_by_email",
-            AsyncMock(side_effect=[active_user, active_user, None, inactive_user]),
+        ok = await authenticate_user(uow, hasher, "auth@example.com", "AuthPass123")
+        assert ok is not None and ok.email == "auth@example.com"
+        assert (
+            await authenticate_user(uow, hasher, "auth@example.com", "Wrong123") is None
         )
-        monkeypatch.setattr(
-            "app.services.auth_service.verify_password",
-            MagicMock(side_effect=[True, False]),
-        )
-
-        ok_user = await authenticate_user(db, "auth@example.com", "AuthPass123")
-        wrong_password = await authenticate_user(db, "auth@example.com", "WrongPass123")
-        unknown_user = await authenticate_user(db, "missing@example.com", "AuthPass123")
-        inactive = await authenticate_user(db, "inactive@example.com", "AuthPass123")
-
-        assert ok_user is active_user
-        assert wrong_password is None
-        assert unknown_user is None
-        assert inactive is None
-
-    async def test_deactivate_and_activate_user(self, monkeypatch: pytest.MonkeyPatch):
-        """Should toggle active flag and handle missing users."""
-        db = _mock_db()
-        user = User(email="toggle@example.com", hashed_password="hash", is_active=True)
-        user.id = 5
-
-        monkeypatch.setattr(
-            "app.services.auth_service.get_user_by_id",
-            AsyncMock(side_effect=[user, user, None, None]),
+        assert await authenticate_user(uow, hasher, "nobody@example.com", "x1") is None
+        assert (
+            await authenticate_user(uow, hasher, "inactive@example.com", "AuthPass123")
+            is None
         )
 
-        deactivated = await deactivate_user(db, user.id)
-        assert deactivated is not None
-        assert deactivated.is_active is False
+    async def test_deactivate_and_activate_user(self):
+        """Should persist the active flag and handle missing users."""
+        user = User(email="toggle@example.com", hashed_password="hash")
+        uow = FakeUnitOfWork(users=[user])
 
-        activated = await activate_user(db, user.id)
-        missing_deactivate = await deactivate_user(db, 999999)
-        missing_activate = await activate_user(db, 999999)
+        await deactivate_user(uow, user.public_id)
+        assert must(await get_user_by_id(uow, must(user.id))).is_active is False
 
-        assert activated is not None
-        assert activated.is_active is True
-        assert missing_deactivate is None
-        assert missing_activate is None
+        await activate_user(uow, user.public_id)
+        assert must(await get_user_by_id(uow, must(user.id))).is_active is True
+
+        assert await deactivate_user(uow, "missing") is None
+        assert await activate_user(uow, "missing") is None
