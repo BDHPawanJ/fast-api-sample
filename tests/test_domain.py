@@ -100,6 +100,11 @@ class TestProductPrice:
 class TestUser:
     """User account status."""
 
+    def test_email_is_case_insensitive(self):
+        assert User(email=" Alice@Example.COM ", hashed_password="h").email == (
+            "alice@example.com"
+        )
+
     def test_activate_and_deactivate(self):
         user = User(email="a@example.com", hashed_password="hash")
         user.deactivate()

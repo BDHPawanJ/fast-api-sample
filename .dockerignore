@@ -1,0 +1,14 @@
+# Never bake secrets into an image; dev gets .env via the bind mount and
+# deployed environments pass configuration as environment variables.
+.env
+.env.*
+
+.git
+.venv
+.vscode
+**/__pycache__
+.pytest_cache
+.ruff_cache
+htmlcov
+.coverage
+logs

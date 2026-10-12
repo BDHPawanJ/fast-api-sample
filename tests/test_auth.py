@@ -95,6 +95,30 @@ class TestAuthEndpoints:
         assert response.status_code == 409
         assert response.headers["content-type"] == "application/problem+json"
 
+    async def test_register_duplicate_email_differing_in_case(
+        self, client: AsyncClient, test_user: User
+    ):
+        """Emails are case-insensitive: one account per address."""
+        response = await client.post(
+            "/v1/auth/register",
+            json={"email": test_user.email.upper(), "password": "AnotherPass123"},
+            headers=idempotency_headers(),
+        )
+
+        assert response.status_code == 409
+
+    async def test_login_email_is_case_insensitive(
+        self, client: AsyncClient, test_user: User
+    ):
+        """Login matches the account regardless of email case."""
+        response = await client.post(
+            "/v1/auth/login",
+            json={"email": test_user.email.upper(), "password": "TestPassword123"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["user"]["user_id"] == test_user.public_id
+
     async def test_register_weak_password(self, client: AsyncClient):
         """Test registration with weak password fails validation."""
         response = await client.post(

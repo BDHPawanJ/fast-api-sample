@@ -1,0 +1,39 @@
+{
+  // Open with "Dev Containers: Reopen in Container". Reuses the compose `app`
+  // service (dev image), so the editor, tests and debugger all use /opt/venv.
+  "name": "fastapi-sample",
+  // Same compose file as `make up`: the editor attaches to the very container
+  // the Makefile uses, whichever was started first.
+  "dockerComposeFile": ["../compose.yaml"],
+  "service": "app",
+  "runServices": ["app", "db"],
+  "workspaceFolder": "/app",
+  "remoteUser": "app",
+  // Keep the service's own command: the uvicorn + debugpy dev server keeps
+  // running, and "Attach: app container" works from inside the container.
+  "overrideCommand": false,
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": ["--no-cov"],
+        // Use the lockfile's ruff, not the extension's bundled copy, so the
+        // editor and `make lint` agree.
+        "ruff.importStrategy": "fromEnvironment",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  }
+}

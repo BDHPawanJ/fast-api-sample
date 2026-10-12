@@ -103,7 +103,8 @@ class FakeUserRepository:
         return self._find(lambda u: u.public_id == public_id)
 
     async def get_by_email(self, email: str) -> User | None:
-        return self._find(lambda u: u.email == email)
+        normalized = User.normalize_email(email)
+        return self._find(lambda u: u.email == normalized)
 
     async def add(self, user: User) -> None:
         if self._find(lambda u: u.email == user.email):

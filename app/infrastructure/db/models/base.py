@@ -43,7 +43,8 @@ class BaseModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+        server_default=text("CURRENT_TIMESTAMP"),
+        # Set by the ORM on every UPDATE it issues (Postgres has no ON UPDATE).
         onupdate=func.now(),
         doc="Timestamp of last update",
     )

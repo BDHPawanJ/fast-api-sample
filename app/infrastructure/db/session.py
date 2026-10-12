@@ -17,7 +17,7 @@ engine = create_async_engine(
     echo=settings.DEBUG,
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_pre_ping=False,  # Disabled due to aiomysql compatibility issues
+    pool_pre_ping=True,
     poolclass=NullPool if settings.is_testing else None,
 )
 

@@ -9,13 +9,13 @@ requires-python = ">=3.13"
 readme = "README.md"
 license = {text = "MIT"}
 dependencies = [
-    "aiomysql>=0.3.2",
     "alembic>=1.20.0",
     "bcrypt<4.1",
     "email-validator>=2.3.0",
     "fastapi>=0.142.2",
     "greenlet>=3.5.6",
     "passlib[bcrypt]>=1.7.4",
+    "psycopg[c]>=3.3.6",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.4",
@@ -91,6 +91,7 @@ skip_covered = false
 [dependency-groups]
 dev = [
     "datamodel-code-generator>=0.83.0",
+    "debugpy>=1.8.22",
     "httpx==0.26.0",
     "import-linter>=2.15",
     "pyright>=1.1.414",

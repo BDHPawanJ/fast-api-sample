@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, String, text
+from sqlalchemy import Boolean, String, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.db.models.base import BaseModel
@@ -53,7 +53,7 @@ class User(BaseModel):
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
-        server_default=text("1"),
+        server_default=true(),
         nullable=False,
         doc="Flag indicating if user account is active",
     )

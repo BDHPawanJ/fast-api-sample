@@ -4,9 +4,9 @@ Revision ID: 005
 Revises: 004
 Create Date: 2026-10-12 12:00:00.000000
 
-MySQL FLOAT is single precision, so a stored 999.99 reads back as
-999.989990234375. Converting to DECIMAL rounds existing values to the
-nearest cent, which restores the prices that were originally submitted.
+Binary floating point cannot store most cent values exactly (999.99 was
+read back as 999.989990234375 under MySQL's single-precision FLOAT).
+Converting to NUMERIC rounds existing values to the nearest cent.
 
 """
 from typing import Sequence, Union

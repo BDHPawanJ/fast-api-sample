@@ -55,7 +55,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Database Configuration
-    DATABASE_URL: str = "mysql+aiomysql://root:password@localhost:3306/fastapi_sample"
+    DATABASE_URL: str = (
+        "postgresql+psycopg://postgres:password@localhost:5432/fastapi_sample"
+    )
     DATABASE_POOL_SIZE: int = 5
     DATABASE_MAX_OVERFLOW: int = 10
     TEST_DATABASE_URL: Optional[str] = None

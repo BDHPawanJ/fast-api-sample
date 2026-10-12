@@ -8,7 +8,7 @@ This is a **FastAPI backend service** with:
 - user registration and login
 - JWT-based authentication
 - product APIs (create, list, get, update, delete)
-- MySQL database access through async SQLAlchemy
+- PostgreSQL database access through async SQLAlchemy (psycopg 3)
 - Alembic migrations
 - tests with pytest
 
@@ -18,40 +18,22 @@ Base API version path: `/v1`
 
 ## 2) Quick setup commands
 
-Run these from project root:
+Everything runs in Docker; the host needs only Docker and `make`.
 
-```bash
-uv sync
-```
-
-Create `.env`:
+Create `.env` (bind-mounted into the dev container; `DATABASE_URL` comes from `compose.yaml`):
 
 ```env
-DATABASE_URL=mysql+aiomysql://<user>:<password>@localhost:3306/fastapi_sample
 SECRET_KEY=your-secret-key-here
 ENVIRONMENT=development
 DEBUG=True
 ```
 
-Create DBs (example):
+Start the stack and apply migrations:
 
 ```bash
-mysql -u root -p
-CREATE DATABASE fastapi_sample;
-CREATE DATABASE fastapi_sample_test;
-exit;
-```
-
-Apply migrations:
-
-```bash
-uv run alembic upgrade head
-```
-
-Run server:
-
-```bash
-uv run uvicorn app.main:app --reload
+make build    # dev image
+make up       # PostgreSQL + API (hot reload, debugger on localhost:5678)
+make migrate
 ```
 
 Useful URLs:
@@ -63,24 +45,18 @@ Useful URLs:
 
 ## 3) Daily developer commands
 
-Run tests:
-
 ```bash
-uv run pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
+make test                               # tests with coverage
+make test ARGS="tests/test_auth.py -v"  # specific tests
+make format                             # ruff fix + format
+make lint                               # ruff, pyright, import-linter
+make logs                               # follow app logs
+make shell                              # shell in a dev container
 ```
 
-Run specific tests:
-
-```bash
-uv run pytest tests/test_auth.py -v
-uv run pytest tests/test_products.py -v
-```
-
-Format code:
-
-```bash
-make format
-```
+Debugging: VS Code **Attach: app container** (`.vscode/launch.json`) attaches to
+the running server on port 5678. For tests, run `make test-debug ARGS=...` and
+use **Attach: tests in container** (port 5679).
 
 ---
 

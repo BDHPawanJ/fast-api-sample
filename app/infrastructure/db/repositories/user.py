@@ -37,7 +37,7 @@ class SqlAlchemyUserRepository:
         return to_domain(row) if row else None
 
     async def get_by_email(self, email: str) -> User | None:
-        row = await self._row(UserRow.email == email)
+        row = await self._row(UserRow.email == User.normalize_email(email))
         return to_domain(row) if row else None
 
     async def add(self, user: User) -> None:

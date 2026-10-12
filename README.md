@@ -6,7 +6,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 
 - **RESTful API Design** - Complete CRUD operations for Products resource
 - **JWT Authentication** - Secure user registration and login with JWT tokens
-- **Async Database Operations** - SQLAlchemy 2.0 with async support and MySQL
+- **Async Database Operations** - SQLAlchemy 2.0 with async support and PostgreSQL
 - **Structured Logging** - Comprehensive logging with JSON and text formats
 - **Contract-Driven Responses** - Resource responses, Problem Details errors, cursor pagination
 - **Type Safety** - Full type hints and Pydantic validation
@@ -17,9 +17,8 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 
 ##  Requirements
 
-- Python 3.13+ (uv installs it automatically if missing)
-- MySQL 5.7+ or MySQL 8.0+
-- [uv](https://docs.astral.sh/uv/) for Python and dependency management
+- Docker with Compose v2 (runs Python 3.13, PostgreSQL 18 and all tooling)
+- `make`
 
 ##  Technology Stack
 
@@ -28,7 +27,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 | **Web Framework** | FastAPI 0.109.0 |
 | **Server** | Uvicorn (ASGI server) |
 | **ORM** | SQLAlchemy 2.0 (async) |
-| **Database** | MySQL with aiomysql driver |
+| **Database** | PostgreSQL with psycopg 3 driver (async) |
 | **Authentication** | JWT (python-jose) |
 | **Password Hashing** | Bcrypt (passlib) |
 | **Validation** | Pydantic 2.0 |
@@ -93,11 +92,16 @@ fastapi_sample/
 ├── alembic/
 │   ├── versions/            # Migration files
 │   └── env.py               # Alembic configuration
+├── .devcontainer/           # VS Code dev container (reuses the compose app service)
+├── .vscode/launch.json      # Debugger attach configs (app :5678, tests :5679)
+├── Dockerfile               # base → build → dev / prod (prod is the default target)
+├── docker/                  # postgres/init (test DB), dev/start.sh (uvicorn + debugpy)
 ├── docs/
 │   ├── API.md               # API documentation
 │   ├── COMPARISON.md        # Framework comparison guide
 │   └── PROJECT.md           # Project explainer
 ├── .env                     # Local environment variables 
+├── compose.yaml             # Local PostgreSQL 18 service
 ├── Makefile                 # Schema generation, formatting, lint/typecheck/layer targets
 ├── openapi.yaml             # OpenAPI contract (source of truth)
 ├── alembic.ini              # Alembic configuration
@@ -108,6 +112,10 @@ fastapi_sample/
 
 ##  Getting Started
 
+All development happens in Docker: the app, tests, linters and migrations run
+in the `dev` image, which is the production image plus tooling. Only Docker and
+`make` are needed on the host.
+
 ### 1. Clone the Repository
 
 ```bash
@@ -115,29 +123,12 @@ git clone <repository-url>
 cd fastapi_sample
 ```
 
-### 2. Install uv
+### 2. Set Up Environment Variables
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh  # or: brew install uv
-```
-
-### 3. Install Dependencies
-
-```bash
-uv sync  # creates .venv and installs runtime + dev dependencies from uv.lock
-```
-
-Prefix commands with `uv run` (e.g. `uv run pytest`) or activate `.venv` manually.
-To add or upgrade packages use `uv add <pkg>` / `uv add --dev <pkg>` / `uv lock --upgrade`.
-
-### 4. Set Up Environment Variables
-
-Create a `.env` file in the project root and set the following variables:
+Create a `.env` file in the project root (it is bind-mounted into the dev
+container and never copied into images):
 
 ```env
-# Database Configuration
-DATABASE_URL=mysql+aiomysql://root:password@127.0.0.1:3306/fastapi_sample
-
 # JWT Secret (generate a secure key)
 SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
 
@@ -150,65 +141,93 @@ DOCS_ENABLED=True  # serve /docs, /redoc, /openapi.json; default: False
 With `ENVIRONMENT=production`, `DEBUG` and `DOCS_ENABLED` are always forced off
 (regardless of their values), and `/v1/health/detailed` responds 404.
 
-### 5. Create Database
+`DATABASE_URL` is set by `compose.yaml` to point at the `db` container.
 
-Create the MySQL database:
-
-```bash
-mysql -u root -h 127.0.0.1 -ppassword 
-CREATE DATABASE fastapi_sample;
-CREATE DATABASE fastapi_sample_test;  # For testing
-exit;
-```
-
-### 6. Run Database Migrations
+### 3. Start the Stack
 
 ```bash
-uv run alembic upgrade head
+make build    # build the dev image (again after changing dependencies)
+make up       # PostgreSQL + API with hot reload
+make migrate  # apply database migrations
 ```
 
-This will create the necessary tables (`users` and `products`) in your database.
-
-### 7. Run the Application
-
-```bash
-uv run uvicorn app.main:app --reload
-```
+The first start creates `fastapi_sample` and the test database
+`fastapi_sample_test` (see `docker/postgres/init/`). Data persists in the
+`db-data` volume; `docker compose down -v` wipes it.
 
 The API will be available at:
 - **API**: http://localhost:8000
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
+`make help` lists every target; `make logs` follows the app, `make shell`
+opens a shell in a dev container.
+
+### 4. Editor (VS Code Dev Container)
+
+Run **Dev Containers: Reopen in Container**. VS Code attaches to the same `app`
+container `make up` uses (whichever starts first), and runs its Python,
+Pylance, debugpy and Ruff extensions inside it, so IntelliSense, the test
+explorer, formatting and the terminal all use the container's `/opt/venv`.
+A host `.venv` is not needed; if one exists it is hidden inside the container.
+
+### 5. Debugging
+
+The dev server always runs under [debugpy](https://github.com/microsoft/debugpy)
+on `localhost:5678` (bound to this machine only). In VS Code, run
+**Attach: app container** from `.vscode/launch.json`; attach and detach at any
+time. Breakpoints keep working across hot reloads, because the debugger follows
+uvicorn's worker process. The same configuration works from the host window and
+from inside the dev container.
+
+- Breakpoints in startup code (lifespan, settings): start with
+  `DEBUGPY_WAIT=1 docker compose up app`, which blocks until you attach.
+- Tests: run `make test-debug ARGS=tests/test_products.py`, then
+  **Attach: tests in container** (port 5679).
+- Other editors: any DAP client attaching to `localhost:5678` with the path
+  mapping `<repo> -> /app` works (PyCharm Professional also supports Docker
+  Compose interpreters directly).
+
+### 6. Dependencies
+
+Edit dependencies with uv inside the container and rebuild:
+
+```bash
+make shell
+uv add <pkg>        # or: uv add --dev <pkg>, uv lock --upgrade
+exit
+make build && make up
+```
+
+`pyproject.toml` and `uv.lock` are on the bind mount, so the change lands in
+the repo; the image picks it up on rebuild.
+
+### 7. Production Image
+
+```bash
+docker build -t fastapi-sample .   # default target: prod
+```
+
+The same image runs in every environment; configure it with environment
+variables (`DATABASE_URL`, `SECRET_KEY`, `ENVIRONMENT`, ...). Migrations run
+from the same image: `docker run --rm <env vars> fastapi-sample alembic upgrade head`.
+It contains no dev tools or debugger, runs as a non-root user, and uses the
+compiled psycopg driver (`PSYCOPG_IMPL=c` makes a missing build fail at start).
+
 ##  Testing
 
-### Run All Tests
-
 ```bash
-uv run pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
+make test                                  # full suite with coverage
+make test ARGS="tests/test_auth.py -v"     # specific tests
 ```
 
-### View Coverage Report
-
-After running tests, open `htmlcov/index.html` in your browser to see the detailed coverage report.
-
-### Run Specific Tests
-
-```bash
-# Test only authentication
-uv run pytest tests/test_auth.py -v
-
-# Test only products
-uv run pytest tests/test_products.py -v
-```
+After running tests, open `htmlcov/index.html` for the coverage report.
 
 ##  Code Formatting
 
-Sort imports and format all code with Ruff:
-
 ```bash
-make format   # uv run ruff check --fix . && uv run ruff format .
-make lint     # check only, e.g. in CI
+make format   # ruff: fix imports and format
+make lint     # ruff + pyright + import-linter, check only (e.g. in CI)
 ```
 
 ##  OpenAPI Contract and Generated Models
@@ -230,7 +249,7 @@ make openapi        # Verify the app serves exactly openapi.yaml
 ```
 
 Generator options live in `[tool.datamodel-codegen]` in `pyproject.toml`, so
-`make schemas` is just `uv run datamodel-codegen`. The output is formatted with
+`make schemas` runs `datamodel-codegen` in the dev container. The output is formatted with
 the project's Ruff configuration.
 
 To change the API: edit `openapi.yaml`, run `make schemas`, update routes or
@@ -313,28 +332,27 @@ The API uses JWT (JSON Web Tokens) for authentication:
 
 If you encounter database connection errors:
 
-1. Verify MySQL is running: `mysql -u root -p`
-2. Check database exists: `SHOW DATABASES;`
-3. Verify credentials in `.env` file
-4. Ensure dependencies are installed: `uv sync`
+1. Verify PostgreSQL is running: `docker compose ps` (should be `healthy`)
+2. Check databases exist: `docker compose exec db psql -U postgres -l`
+3. Verify `SECRET_KEY` and other settings in `.env`
+4. Rebuild after dependency changes: `make build`
 
 ### Migration Issues
 
 If Alembic migrations fail:
 
 ```bash
-# Reset migrations ( This will drop all tables!)
-uv run alembic downgrade base
-uv run alembic upgrade head
+# Reset migrations (this drops all tables!)
+docker compose run --rm app alembic downgrade base
+make migrate
 ```
 
 ### Import Errors
 
-If you get import errors, make sure the environment is in sync and run commands through uv:
+If you get import errors, the dev image is probably older than `uv.lock`:
 
 ```bash
-uv sync
-uv run <command>
+make build && make up
 ```
 
 ---

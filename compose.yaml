@@ -1,12 +1,57 @@
+# Fixed project name: `make up` and the VS Code dev container share one stack
+# (and one db-data volume) instead of creating separate ones.
+name: fast-api-sample
+
 services:
+  app:
+    build:
+      context: .
+      target: dev
+    image: fastapi-sample:dev
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Override .env (bind-mounted below) for in-container networking.
+      DATABASE_URL: postgresql+psycopg://postgres:password@db:5432/fastapi_sample
+      # `DEBUGPY_WAIT=1 docker compose up app`: block startup until a debugger attaches.
+      DEBUGPY_WAIT: ${DEBUGPY_WAIT:-0}
+    ports:
+      - "8000:8000"
+      # debugpy can execute arbitrary code: reachable from this machine only.
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - .:/app
+      # Hide a host-created .venv (macOS binaries) inside the container so no
+      # tool or editor picks it over /opt/venv. The host copy is untouched.
+      - /app/.venv
+      # VS Code dev container: keep its server and extensions across rebuilds.
+      - vscode-server:/home/app/.vscode-server
+    # Lets `docker compose run app pytest` etc. share the same container setup.
+    stdin_open: true
+    tty: true
+
   db:
     hostname: db
-    image: mysql:8.0.42
-    platform: linux/amd64
+    image: postgres:18.6-alpine
     restart: unless-stopped
     environment:
-      MYSQL_USER: lemonaid
-      MYSQL_PASSWORD: password
-      MYSQL_ROOT_PASSWORD: password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: fastapi_sample
     ports:
-      - "3306:3306"
+      - "5432:5432"
+    volumes:
+      # Postgres 18+ images keep data under /var/lib/postgresql/<major>/docker.
+      - db-data:/var/lib/postgresql
+      # Runs once, on first start with an empty volume.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fastapi_sample"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
+  vscode-server:

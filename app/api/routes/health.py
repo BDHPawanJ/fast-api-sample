@@ -72,7 +72,7 @@ async def database_health_check(request: Request, db: AsyncSession = Depends(get
         result = await db.execute(text("SELECT 1"))
         result.scalar()
         return DatabaseHealth(
-            status="healthy", database="connected", database_type="mysql"
+            status="healthy", database="connected", database_type="postgresql"
         )
     except Exception:
         return problem_response(
@@ -126,7 +126,7 @@ async def detailed_health_check(db: AsyncSession = Depends(get_db)):
         database=DatabaseHealthDetail(
             status=db_status,
             message=db_message,
-            type="mysql",
+            type="postgresql",
             pool_size=settings.DATABASE_POOL_SIZE,
             max_overflow=settings.DATABASE_MAX_OVERFLOW,
         ),

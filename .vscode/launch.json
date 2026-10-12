@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Attach to the running dev server (`make up`). Attach/detach any time;
+      // subProcess follows uvicorn's worker across hot reloads.
+      "name": "Attach: app container",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5678 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": true
+    },
+    {
+      // Start `make test-debug` (optionally ARGS=tests/test_x.py) first; it
+      // waits for this to attach before running pytest.
+      "name": "Attach: tests in container",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5679 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}", "remoteRoot": "/app" }
+      ],
+      "justMyCode": false
+    }
+  ]
+}

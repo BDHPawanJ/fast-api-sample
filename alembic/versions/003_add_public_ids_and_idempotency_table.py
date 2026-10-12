@@ -41,8 +41,13 @@ def upgrade() -> None:
             "products", sa.Column("public_id", sa.String(length=36), nullable=True)
         )
 
-    op.execute("UPDATE users SET public_id = UUID() WHERE public_id IS NULL")
-    op.execute("UPDATE products SET public_id = UUID() WHERE public_id IS NULL")
+    op.execute(
+        "UPDATE users SET public_id = gen_random_uuid()::text WHERE public_id IS NULL"
+    )
+    op.execute(
+        "UPDATE products SET public_id = gen_random_uuid()::text "
+        "WHERE public_id IS NULL"
+    )
 
     op.alter_column(
         "users",
