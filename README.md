@@ -33,7 +33,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 | **Password Hashing** | Bcrypt (passlib) |
 | **Validation** | Pydantic 2.0 |
 | **Migrations** | Alembic |
-| **Testing** | pytest with httpx |
+| **Testing** | pytest with httpx and Locust |
 | **Code Formatting** | Black + isort |
 
 ##  Project Structure
@@ -186,6 +186,30 @@ pytest tests/test_auth.py -v
 
 # Test only products
 pytest tests/test_products.py -v
+```
+
+### Run Load Tests with Locust
+
+Start the API server first, then run Locust:
+
+```bash
+locust -f locustfile.py --host=http://localhost:8000
+or
+python -m locust -f locustfile.py --host=http://localhost:8000
+```
+
+Open http://localhost:8089, set the number of users/spawn rate, and start the test.
+
+The default [locustfile.py](locustfile.py) covers all core endpoints:
+- `GET /`
+- `GET /v1/health`, `GET /v1/health/db`, `GET /v1/health/detailed`
+- `POST /v1/auth/register`, `POST /v1/auth/login`, `GET /v1/auth/me`
+- `GET /v1/products`, `GET /v1/products/{product_id}`, `POST /v1/products`, `PATCH /v1/products/{product_id}`, `DELETE /v1/products/{product_id}`
+
+To run headless (CI/CLI-friendly):
+
+```bash
+locust -f locustfile.py --host=http://localhost:8000 --headless -u 20 -r 5 -t 2m
 ```
 
 ##  Code Formatting
