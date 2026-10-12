@@ -1,4 +1,8 @@
-# FastAPI Sample Project Walkthrough 
+# FastAPI Sample Project Walkthrough
+
+How the code fits together at runtime: the architecture, what happens at
+startup, and how retry-safe requests work. For the folder layout see
+[STRUCTURE.md](STRUCTURE.md); to run it see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ---
 
@@ -8,55 +12,36 @@ This is a **FastAPI backend service** with:
 - user registration and login
 - JWT-based authentication
 - product APIs (create, list, get, update, delete)
+- a shopping cart domain model and use cases (no HTTP endpoints yet)
 - PostgreSQL database access through async SQLAlchemy (psycopg 3)
 - Alembic migrations
-- tests with pytest
+- tests with pytest, run in Docker
 
 Base API version path: `/v1`
 
 ---
 
-## 2) Quick setup commands
-
-Everything runs in Docker; the host needs only Docker and `make`.
-
-Create `.env` (bind-mounted into the dev container; `DATABASE_URL` comes from `compose.yaml`):
-
-```env
-SECRET_KEY=your-secret-key-here
-ENVIRONMENT=development
-DEBUG=True
-```
-
-Start the stack and apply migrations:
+## 2) Running it
 
 ```bash
-make build    # dev image
-make up       # PostgreSQL + API (hot reload, debugger on localhost:5678)
-make migrate
+make build && make up && make migrate
 ```
 
-Useful URLs:
-- API root: `http://localhost:8000/`
-- Swagger: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+The full setup, daily commands and troubleshooting are in
+[DEVELOPMENT.md](DEVELOPMENT.md); debugging is in [DEBUGGING.md](DEBUGGING.md).
 
 ---
 
-## 3) Daily developer commands
+## 3) Reading the code
 
-```bash
-make test                               # tests with coverage
-make test ARGS="tests/test_auth.py -v"  # specific tests
-make format                             # ruff fix + format
-make lint                               # ruff, pyright, import-linter
-make logs                               # follow app logs
-make shell                              # shell in a dev container
-```
+Start with these, in order:
 
-Debugging: VS Code **Attach: app container** (`.vscode/launch.json`) attaches to
-the running server on port 5678. For tests, run `make test-debug ARGS=...` and
-use **Attach: tests in container** (port 5679).
+1. [app/main.py](../app/main.py): how the app is assembled.
+2. [app/api/routes/products.py](../app/api/routes/products.py): a typical route.
+3. [app/application/use_cases/products.py](../app/application/use_cases/products.py): the use cases it calls.
+4. [app/domain/product.py](../app/domain/product.py): the rules they rely on.
+5. [app/infrastructure/db/repositories/product.py](../app/infrastructure/db/repositories/product.py): how it is stored.
+6. [app/api/deps.py](../app/api/deps.py): where the pieces are wired together.
 
 ---
 
@@ -87,7 +72,7 @@ Layers:
 - **Infrastructure** (`app/infrastructure`): SQLAlchemy models, repositories, unit of work, bcrypt hasher, settings, logging.
 - **API** (`app/api`): routes, schemas, middleware, JWT auth, error handlers, and the composition root that wires adapters to ports.
 
-`make lint` enforces this: pyright checks that every adapter satisfies its port, and import-linter rejects imports that point outward.
+`make lint` enforces this: pyright checks that every adapter satisfies its port, and import-linter rejects imports that point outward. The layers and where new code belongs are described in [STRUCTURE.md](STRUCTURE.md).
 
 ---
 
@@ -102,92 +87,19 @@ Layers:
 
 ---
 
-## 6) Request flow (end-to-end)
+## 6) Idempotent requests
 
-### A) Register user: `POST /v1/auth/register`
+`POST /v1/auth/register` and `POST /v1/products` require an
+`Idempotency-Key` header (any unique string, a UUID is typical). Retrying a
+request with the same key and body returns the original response without
+repeating the operation; reusing a key with a different body returns `409`.
+The operation and the stored response are committed together, so a retry
+after a failure either replays a completed request or runs it fresh.
 
-Path in code:
-1. Route: [app/api/routes/auth.py](../app/api/routes/auth.py)
-2. Idempotency key handling: [app/application/idempotency.py](../app/application/idempotency.py)
-3. Use case: [app/application/auth.py](../app/application/auth.py)
-4. Password hashing adapter: [app/infrastructure/security/password.py](../app/infrastructure/security/password.py)
-5. Persistence: [app/infrastructure/db/repositories/user.py](../app/infrastructure/db/repositories/user.py) → [app/infrastructure/db/models/user.py](../app/infrastructure/db/models/user.py)
-6. Output shaping: [app/api/serialization.py](../app/api/serialization.py)
-
-### B) Login: `POST /v1/auth/login`
-
-1. Route validates credentials schema.
-2. Use case verifies email + password through the `PasswordHasher` port.
-3. Route creates JWT token ([app/api/auth.py](../app/api/auth.py)) and returns token + user resource.
-
-### C) Create product: `POST /v1/products`
-
-1. Route: [app/api/routes/products.py](../app/api/routes/products.py)
-2. Auth dependency validates bearer token: [app/api/auth.py](../app/api/auth.py)
-3. Use case builds a domain `Product` and adds it: [app/application/products.py](../app/application/products.py)
-4. Repository persists it: [app/infrastructure/db/repositories/product.py](../app/infrastructure/db/repositories/product.py)
-5. Idempotency record saved for retry-safe POST.
-
-### D) List products: `GET /v1/products`
-
-1. Route parses `limit`, `cursor`, `search`.
-2. Cursor is decoded/encoded by [app/api/pagination.py](../app/api/pagination.py).
-3. Use case queries products using `id` cursor.
-4. Response returns `items`, `next_cursor`, `has_more`.
-
-### E) Update product: `PATCH /v1/products/{product_id}`
-
-1. Route checks `If-Match` header (ETag optimistic concurrency).
-2. ETag helper from [app/api/serialization.py](../app/api/serialization.py).
-3. Use case applies the partial update via `Product.update_details` (invariants enforced) and commits.
-
----
-
-## 7) How important files relate to each other
-
-### Entrypoint and composition
-- [app/main.py](../app/main.py): application entrypoint, app creation, middleware, handlers, router include
-- [app/api/v1/router.py](../app/api/v1/router.py): collects route modules
-- [app/api/deps.py](../app/api/deps.py): composition root; builds the unit of work and password hasher for `Depends()`
-
-### API endpoints
-- [app/api/routes/auth.py](../app/api/routes/auth.py): register/login/me
-- [app/api/routes/products.py](../app/api/routes/products.py): product CRUD + pagination
-- [app/api/routes/health.py](../app/api/routes/health.py): app and DB health checks
-
-### Shared runtime behavior
-- [app/infrastructure/config.py](../app/infrastructure/config.py): environment and app settings
-- [app/api/lifespan.py](../app/api/lifespan.py): startup/shutdown hooks
-- [app/api/middleware/__init__.py](../app/api/middleware/__init__.py): CORS and custom middleware setup
-- [app/api/middleware/logging.py](../app/api/middleware/logging.py): request ID logging and timing headers
-- [app/api/errors.py](../app/api/errors.py): standard error response conversion, including domain errors
-
-### Domain and use cases
-- [app/domain/](../app/domain): `Product`, `User`, `Cart` entities and domain errors
-- [app/application/ports.py](../app/application/ports.py): repository, `UnitOfWork` and `PasswordHasher` Protocols
-- [app/application/auth.py](../app/application/auth.py): register/authenticate users
-- [app/application/products.py](../app/application/products.py): product operations
-- [app/application/cart.py](../app/application/cart.py): cart operations
-- [app/application/idempotency.py](../app/application/idempotency.py): request replay safety
-
-### Data and persistence
-- [app/infrastructure/db/base.py](../app/infrastructure/db/base.py): SQLAlchemy declarative base
-- [app/infrastructure/db/session.py](../app/infrastructure/db/session.py): async engine/session dependency
-- [app/infrastructure/db/models/](../app/infrastructure/db/models): ORM tables (users, products, carts, idempotency keys)
-- [app/infrastructure/db/repositories/](../app/infrastructure/db/repositories): ORM row ⇄ domain object mapping
-- [app/infrastructure/db/unit_of_work.py](../app/infrastructure/db/unit_of_work.py): transaction boundary
-
-### Contracts and response shapes
-- [openapi.yaml](../openapi.yaml): OpenAPI contract, the source of truth
-- [app/api/schemas/generated.py](../app/api/schemas/generated.py): request and response models generated from `openapi.yaml` by `make schemas` (options in `[tool.datamodel-codegen]` in [pyproject.toml](../pyproject.toml))
-- [app/api/schemas/user.py](../app/api/schemas/user.py), [app/api/schemas/product.py](../app/api/schemas/product.py): subclasses adding custom request validation
-- [app/api/serialization.py](../app/api/serialization.py): domain object to response model mapping + ETag
-- [app/api/problem.py](../app/api/problem.py): RFC 7807 problem response helper
-
-### Tests and migrations
-- [tests/conftest.py](../tests/conftest.py): async test fixtures and DB override
-- [tests/](../tests): domain, use case (with fakes), repository, route and config tests
-- [alembic/env.py](../alembic/env.py): migration runtime setup
-- [alembic/versions/](../alembic/versions): schema history
-
----
+In code: the routes in [app/api/routes/auth.py](../app/api/routes/auth.py) and
+[app/api/routes/products.py](../app/api/routes/products.py) pass the operation
+to `run_idempotent()` in
+[app/application/idempotency.py](../app/application/idempotency.py). The use
+case's own commit is deferred to that outer block (see
+[app/application/unit_of_work.py](../app/application/unit_of_work.py)), which
+is what puts the operation and its stored response in one transaction.

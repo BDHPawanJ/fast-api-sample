@@ -9,8 +9,8 @@ from jose import JWTError, jwt
 
 from app.api.constants import APIMessages, HTTPStatusCodes
 from app.api.deps import get_uow
-from app.application.auth import get_user_by_public_id
 from app.application.ports import UnitOfWork
+from app.application.use_cases.auth import get_user_by_public_id
 from app.domain.user import User
 from app.infrastructure.config import settings
 from app.infrastructure.logging import get_logger

@@ -13,9 +13,9 @@ from app.api.problem import problem_response
 from app.api.schemas.generated import LoginResponse, UserResource
 from app.api.schemas.user import UserCreate, UserLogin
 from app.api.serialization import user_resource
-from app.application.auth import authenticate_user, register_user
 from app.application.idempotency import Outcome, run_idempotent
 from app.application.ports import PasswordHasher, UnitOfWork
+from app.application.use_cases.auth import authenticate_user, register_user
 from app.domain.errors import EmailAlreadyRegistered
 from app.domain.user import User
 from app.infrastructure.config import settings

@@ -16,7 +16,7 @@ from app.api.schemas.product import ProductCreate, ProductUpdate
 from app.api.serialization import make_etag, product_resource
 from app.application.idempotency import Outcome, run_idempotent
 from app.application.ports import UnitOfWork
-from app.application.products import (
+from app.application.use_cases.products import (
     create_product,
     delete_product,
     get_product_by_public_id,

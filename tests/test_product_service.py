@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.application.products import (
+from app.application.use_cases.products import (
     create_product,
     delete_product,
     get_all_products,

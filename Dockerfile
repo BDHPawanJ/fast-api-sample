@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# One image for every environment: `prod` (the default target) is built once
-# and promoted unchanged; configuration comes from environment variables.
-# `dev` adds tooling and the debugger on top of the same runtime layers.
+# `prod` is the default target for cloud deployments
+# `dev` is for local development and adds tooling and the debugger on top of the same runtime layers.
 
 ARG PYTHON_VERSION=3.13
 
@@ -52,9 +51,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     # The bind-mounted repo is owned by another uid; trust it explicitly.
     && git config --system --add safe.directory /app
+# No UV_FROZEN here: `uv add` in the container must update uv.lock and install.
+# (Image builds pass --frozen explicitly.)
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_PYTHON_DOWNLOADS=never \
-    UV_FROZEN=1 \
     # Keep bytecode out of the bind-mounted tree: a host-built __pycache__
     # (e.g. pytest's assert-rewritten modules) records host paths, so the
     # debugger's /app breakpoints would never match.

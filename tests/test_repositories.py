@@ -4,9 +4,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.application.cart import add_to_cart
 from app.application.idempotency import Outcome, run_idempotent
-from app.application.products import create_product
+from app.application.use_cases.cart import add_to_cart
+from app.application.use_cases.products import create_product
 from app.domain.cart import Cart
 from app.domain.errors import EmailAlreadyRegistered
 from app.domain.product import Product

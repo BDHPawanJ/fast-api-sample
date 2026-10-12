@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.application.auth import (
+from app.application.use_cases.auth import (
     activate_user,
     authenticate_user,
     deactivate_user,

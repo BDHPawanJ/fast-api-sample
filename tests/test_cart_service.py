@@ -4,7 +4,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.application.cart import (
+from app.application.errors import ConcurrencyConflict
+from app.application.use_cases.cart import (
     MAX_ATTEMPTS,
     add_to_cart,
     clear_cart,
@@ -12,7 +13,6 @@ from app.application.cart import (
     remove_from_cart,
     update_cart_item,
 )
-from app.application.errors import ConcurrencyConflict
 from app.domain.errors import CartItemNotFound, InsufficientStock, ProductNotFound
 from app.domain.product import Product
 from tests.fakes import FakeUnitOfWork

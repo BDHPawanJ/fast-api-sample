@@ -1,234 +1,61 @@
 # FastAPI Sample Project
 
-A FastAPI sample project demonstrating best practices for building RESTful APIs with Python. This project is designed for comparing FastAPI with other Python web frameworks like Flask and Django.
+A FastAPI sample project demonstrating best practices for building RESTful APIs with Python.
 
 ##  Features
 
-- **RESTful API Design** - Complete CRUD operations for Products resource
-- **JWT Authentication** - Secure user registration and login with JWT tokens
-- **Async Database Operations** - SQLAlchemy 2.0 with async support and PostgreSQL
-- **Structured Logging** - Comprehensive logging with JSON and text formats
-- **Contract-Driven Responses** - Resource responses, Problem Details errors, cursor pagination
-- **Type Safety** - Full type hints and Pydantic validation
-- **Auto-generated Documentation** - Interactive Swagger UI and ReDoc
-- **Testing Suite** - Comprehensive tests with pytest and 70%+ coverage
-- **Code Quality** - Ruff for import sorting and consistent code formatting
-- **Database Migrations** - Alembic for managing database schema changes
-
-##  Requirements
-
-- Docker with Compose v2 (runs Python 3.13, PostgreSQL 18 and all tooling)
-- `make`
+- **RESTful API** - Products CRUD with cursor pagination, ETag/If-Match concurrency and Idempotency-Key retries
+- **JWT Authentication** - Registration and login with bcrypt-hashed passwords
+- **Hexagonal architecture** - Pure domain and use cases, adapters at the edges; layer boundaries enforced by `make lint`
+- **Async PostgreSQL** - SQLAlchemy 2 (async) with psycopg 3; Alembic migrations
+- **Contract-first** - `openapi.yaml` is the source of truth; Pydantic models are generated from it
+- **Problem Details errors** - RFC 7807 responses with stable error codes
+- **Containerized development** - One image for every environment; VS Code dev container and an attachable debugger
+- **Tested and type-checked** - pytest (~90% coverage), pyright over app and tests, ruff, import-linter
 
 ##  Technology Stack
 
 | Component | Technology |
 |-----------|-----------|
-| **Web Framework** | FastAPI 0.109.0 |
-| **Server** | Uvicorn (ASGI server) |
-| **ORM** | SQLAlchemy 2.0 (async) |
-| **Database** | PostgreSQL with psycopg 3 driver (async) |
-| **Authentication** | JWT (python-jose) |
-| **Password Hashing** | Bcrypt (passlib) |
-| **Validation** | Pydantic 2.0 |
+| **Language** | Python 3.13 |
+| **Web Framework** | FastAPI 0.142 on Uvicorn |
+| **ORM** | SQLAlchemy 2.1 (async) |
+| **Database** | PostgreSQL 18, psycopg 3 driver (compiled C implementation) |
 | **Migrations** | Alembic |
+| **Validation** | Pydantic 2, models generated from OpenAPI with datamodel-code-generator |
+| **Authentication** | JWT (python-jose), bcrypt (passlib) |
 | **Testing** | pytest with httpx |
-| **Code Formatting** | Ruff |
+| **Quality** | Ruff, pyright, import-linter |
+| **Tooling** | Docker Compose, uv, debugpy, VS Code Dev Containers |
 
-##  Project Structure
+##  Quick Start
 
-```
-fastapi_sample/
-├── app/                     # Imports point inward only: api → infrastructure → application → domain
-│   ├── domain/              # Entities and business rules; pure Python, no frameworks
-│   │   ├── product.py       # Product invariants and stock helpers
-│   │   ├── user.py          # User account status
-│   │   ├── cart.py          # Shopping cart aggregate (quantity and stock rules)
-│   │   ├── idempotency.py   # Stored idempotent-request outcome
-│   │   └── errors.py        # Domain errors (mapped to 404/422 by the API)
-│   ├── application/         # Use cases; depend on domain + ports only
-│   │   ├── ports.py         # Protocols: repositories, UnitOfWork, PasswordHasher
-│   │   ├── unit_of_work.py  # Nested transactions: only the outermost block commits
-│   │   ├── errors.py        # ConcurrencyConflict, IdempotencyKeyReused
-│   │   ├── auth.py          # Register, authenticate, (de)activate users
-│   │   ├── products.py      # Product use cases
-│   │   ├── cart.py          # Cart use cases
-│   │   └── idempotency.py   # run_idempotent: action + record in one transaction
-│   ├── infrastructure/      # Adapters implementing the ports
-│   │   ├── config.py        # Settings (environment variables)
-│   │   ├── logging.py       # Logging setup
-│   │   ├── db/
-│   │   │   ├── base.py          # Declarative base
-│   │   │   ├── session.py       # Async engine and session
-│   │   │   ├── models/          # SQLAlchemy ORM models (Alembic target)
-│   │   │   ├── repositories/    # ORM row ⇄ domain object mapping
-│   │   │   └── unit_of_work.py  # Transaction boundary
-│   │   └── security/
-│   │       └── password.py  # Bcrypt PasswordHasher
-│   ├── api/                 # HTTP: FastAPI routes and everything request-shaped
-│   │   ├── routes/          # Auth, product and health endpoints
-│   │   ├── v1/router.py     # Versioned router composition
-│   │   ├── schemas/         # Generated contract models + request subclasses
-│   │   ├── middleware/      # Middleware registration, request logging/timing
-│   │   ├── deps.py          # Composition root: builds adapters for Depends()
-│   │   ├── auth.py          # JWT tokens and get_current_user
-│   │   ├── errors.py        # Exception handlers (Problem Details)
-│   │   ├── lifespan.py      # Startup/shutdown hooks
-│   │   ├── constants.py     # API messages and status codes
-│   │   ├── pagination.py    # Cursor encode/decode
-│   │   ├── problem.py       # Problem Details response helper
-│   │   ├── serialization.py # Domain → response models, ETag
-│   │   └── openapi.py       # OpenAPI helpers
-│   └── main.py              # Application entry point
-├── tests/
-│   ├── conftest.py          # Pytest fixtures (real DB + UoW seeding)
-│   ├── fakes.py             # In-memory ports: FakeUnitOfWork, FakePasswordHasher
-│   ├── helpers.py           # must(): narrow Optional lookups in assertions
-│   ├── test_domain.py       # Domain rules (no DB, no mocks)
-│   ├── test_*_service.py    # Use cases against fakes
-│   ├── test_repositories.py # Repositories against the test DB
-│   ├── test_auth.py, test_products.py, test_health.py # HTTP endpoint tests
-│   └── test_openapi.py      # OpenAPI contract tests
-├── alembic/
-│   ├── versions/            # Migration files
-│   └── env.py               # Alembic configuration
-├── .devcontainer/           # VS Code dev container (reuses the compose app service)
-├── .vscode/launch.json      # Debugger attach configs (app :5678, tests :5679)
-├── Dockerfile               # base → build → dev / prod (prod is the default target)
-├── docker/                  # postgres/init (test DB), dev/start.sh (uvicorn + debugpy)
-├── docs/
-│   ├── API.md               # API documentation
-│   ├── COMPARISON.md        # Framework comparison guide
-│   └── PROJECT.md           # Project explainer
-├── .env                     # Local environment variables 
-├── compose.yaml             # Local PostgreSQL 18 service
-├── Makefile                 # Schema generation, formatting, lint/typecheck/layer targets
-├── openapi.yaml             # OpenAPI contract (source of truth)
-├── alembic.ini              # Alembic configuration
-├── pyproject.toml           # Project metadata, dependencies and tool config
-├── uv.lock                  # Locked dependency versions (managed by uv)
-└── README.md                # This file
-```
-
-##  Getting Started
-
-All development happens in Docker: the app, tests, linters and migrations run
-in the `dev` image, which is the production image plus tooling. Only Docker and
-`make` are needed on the host.
-
-### 1. Clone the Repository
+You need Docker (with Compose v2) and `make`; everything else runs in containers.
 
 ```bash
-git clone <repository-url>
-cd fastapi_sample
+git clone <repository-url> && cd fast-api-sample
+printf 'SECRET_KEY=%s\nDOCS_ENABLED=True\n' "$(openssl rand -hex 32)" > .env # creates (overwrites) .env
+make build      # build the dev image
+make up         # start PostgreSQL + the API (hot reload, debugger on :5678)
+make migrate    # create the tables
+make test       # run the test suite
 ```
 
-### 2. Set Up Environment Variables
+The API is now at http://localhost:8000, with interactive docs at
+http://localhost:8000/docs. `make help` lists every command.
 
-Create a `.env` file in the project root (it is bind-mounted into the dev
-container and never copied into images):
+For editing, open the folder in VS Code and run **Dev Containers: Reopen in
+Container**.
 
-```env
-# JWT Secret (generate a secure key)
-SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
+##  Documentation
 
-# Other settings
-ENVIRONMENT=development
-DEBUG=True         # default: False
-DOCS_ENABLED=True  # serve /docs, /redoc, /openapi.json; default: False
-```
-
-With `ENVIRONMENT=production`, `DEBUG` and `DOCS_ENABLED` are always forced off
-(regardless of their values), and `/v1/health/detailed` responds 404.
-
-`DATABASE_URL` is set by `compose.yaml` to point at the `db` container.
-
-### 3. Start the Stack
-
-```bash
-make build    # build the dev image (again after changing dependencies)
-make up       # PostgreSQL + API with hot reload
-make migrate  # apply database migrations
-```
-
-The first start creates `fastapi_sample` and the test database
-`fastapi_sample_test` (see `docker/postgres/init/`). Data persists in the
-`db-data` volume; `docker compose down -v` wipes it.
-
-The API will be available at:
-- **API**: http://localhost:8000
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-`make help` lists every target; `make logs` follows the app, `make shell`
-opens a shell in a dev container.
-
-### 4. Editor (VS Code Dev Container)
-
-Run **Dev Containers: Reopen in Container**. VS Code attaches to the same `app`
-container `make up` uses (whichever starts first), and runs its Python,
-Pylance, debugpy and Ruff extensions inside it, so IntelliSense, the test
-explorer, formatting and the terminal all use the container's `/opt/venv`.
-A host `.venv` is not needed; if one exists it is hidden inside the container.
-
-### 5. Debugging
-
-The dev server always runs under [debugpy](https://github.com/microsoft/debugpy)
-on `localhost:5678` (bound to this machine only). In VS Code, run
-**Attach: app container** from `.vscode/launch.json`; attach and detach at any
-time. Breakpoints keep working across hot reloads, because the debugger follows
-uvicorn's worker process. The same configuration works from the host window and
-from inside the dev container.
-
-- Breakpoints in startup code (lifespan, settings): start with
-  `DEBUGPY_WAIT=1 docker compose up app`, which blocks until you attach.
-- Tests: run `make test-debug ARGS=tests/test_products.py`, then
-  **Attach: tests in container** (port 5679).
-- Other editors: any DAP client attaching to `localhost:5678` with the path
-  mapping `<repo> -> /app` works (PyCharm Professional also supports Docker
-  Compose interpreters directly).
-
-### 6. Dependencies
-
-Edit dependencies with uv inside the container and rebuild:
-
-```bash
-make shell
-uv add <pkg>        # or: uv add --dev <pkg>, uv lock --upgrade
-exit
-make build && make up
-```
-
-`pyproject.toml` and `uv.lock` are on the bind mount, so the change lands in
-the repo; the image picks it up on rebuild.
-
-### 7. Production Image
-
-```bash
-docker build -t fastapi-sample .   # default target: prod
-```
-
-The same image runs in every environment; configure it with environment
-variables (`DATABASE_URL`, `SECRET_KEY`, `ENVIRONMENT`, ...). Migrations run
-from the same image: `docker run --rm <env vars> fastapi-sample alembic upgrade head`.
-It contains no dev tools or debugger, runs as a non-root user, and uses the
-compiled psycopg driver (`PSYCOPG_IMPL=c` makes a missing build fail at start).
-
-##  Testing
-
-```bash
-make test                                  # full suite with coverage
-make test ARGS="tests/test_auth.py -v"     # specific tests
-```
-
-After running tests, open `htmlcov/index.html` for the coverage report.
-
-##  Code Formatting
-
-```bash
-make format   # ruff: fix imports and format
-make lint     # ruff + pyright + import-linter, check only (e.g. in CI)
-```
+| Document | Read it for |
+|---|---|
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Container setup, daily workflow, migrations, dependencies, configuration, troubleshooting |
+| [docs/DEBUGGING.md](docs/DEBUGGING.md) | Attaching a debugger to the API, startup code and tests |
+| [docs/STRUCTURE.md](docs/STRUCTURE.md) | Folder structure, the layers, and where new code goes |
+| [docs/PROJECT.md](docs/PROJECT.md) | Walkthrough: architecture, startup, idempotent requests |
+| [openapi.yaml](openapi.yaml) | The API reference: endpoints, headers, request and response schemas |
 
 ##  OpenAPI Contract and Generated Models
 
@@ -248,13 +75,13 @@ make schemas-check  # Fail if generated models are out of date (e.g. in CI)
 make openapi        # Verify the app serves exactly openapi.yaml
 ```
 
-Generator options live in `[tool.datamodel-codegen]` in `pyproject.toml`, so
-`make schemas` runs `datamodel-codegen` in the dev container. The output is formatted with
-the project's Ruff configuration.
+Generator options live in `[tool.datamodel-codegen]` in `pyproject.toml`;
+`make schemas` runs `datamodel-codegen` in the dev container, and the output is
+formatted with the project's Ruff configuration.
 
 To change the API: edit `openapi.yaml`, run `make schemas`, update routes or
 subclasses as needed, then run `make openapi` (which runs
-`tests/test_openapi.py`; use `pytest -vv` on it for a full diff).
+`tests/test_openapi.py`; `make test ARGS="-vv tests/test_openapi.py"` shows a full diff).
 
 ##  API Documentation
 
@@ -298,7 +125,7 @@ curl -X POST "http://localhost:8000/v1/products" \
 curl "http://localhost:8000/v1/products?limit=10"
 ```
 
-For complete API documentation, see [docs/API.md](docs/API.md), walkthrough [docs/PROJECT.md](docs/PROJECT.md), or visit the interactive documentation at http://localhost:8000/docs
+The full API is defined in [openapi.yaml](openapi.yaml), also browsable at http://localhost:8000/docs (requires `DOCS_ENABLED=True`).
 
 ##  Authentication
 
@@ -328,31 +155,5 @@ The API uses JWT (JSON Web Tokens) for authentication:
 
 ##  Troubleshooting
 
-### Database Connection Issues
-
-If you encounter database connection errors:
-
-1. Verify PostgreSQL is running: `docker compose ps` (should be `healthy`)
-2. Check databases exist: `docker compose exec db psql -U postgres -l`
-3. Verify `SECRET_KEY` and other settings in `.env`
-4. Rebuild after dependency changes: `make build`
-
-### Migration Issues
-
-If Alembic migrations fail:
-
-```bash
-# Reset migrations (this drops all tables!)
-docker compose run --rm app alembic downgrade base
-make migrate
-```
-
-### Import Errors
-
-If you get import errors, the dev image is probably older than `uv.lock`:
-
-```bash
-make build && make up
-```
-
----
+See [docs/DEVELOPMENT.md → Troubleshooting](docs/DEVELOPMENT.md#troubleshooting)
+and [docs/DEBUGGING.md → Troubleshooting](docs/DEBUGGING.md#troubleshooting).

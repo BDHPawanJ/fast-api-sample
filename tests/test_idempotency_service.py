@@ -6,7 +6,7 @@ import pytest
 
 from app.application.errors import IdempotencyKeyReused
 from app.application.idempotency import Outcome, run_idempotent
-from app.application.products import create_product
+from app.application.use_cases.products import create_product
 from tests.fakes import FakeUnitOfWork
 
 PAYLOAD = {"name": "Laptop", "price": 10.0}

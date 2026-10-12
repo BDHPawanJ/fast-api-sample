@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.api.auth import create_access_token
-from app.application.auth import register_user
+from app.application.use_cases.auth import register_user
 from app.domain.product import Product
 from app.domain.user import User
 from app.infrastructure.config import settings
