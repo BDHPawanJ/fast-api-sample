@@ -1,10 +1,25 @@
 """Serialization helpers for API resource responses."""
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from app.models.product import Product
 from app.models.user import User
+from app.schemas.generated import ProductResource, UserResource
+
+
+def as_utc(dt: datetime) -> datetime:
+    """
+    Normalize datetime to timezone-aware UTC.
+
+    Args:
+        dt: Datetime value; naive values are assumed to be UTC.
+
+    Returns:
+        datetime: Timezone-aware UTC datetime.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def to_utc_z(dt: datetime) -> str:
@@ -17,14 +32,10 @@ def to_utc_z(dt: datetime) -> str:
     Returns:
         str: UTC ISO-8601 timestamp ending with Z.
     """
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
-    return dt.isoformat().replace("+00:00", "Z")
+    return as_utc(dt).isoformat().replace("+00:00", "Z")
 
 
-def user_resource(user: User) -> dict:
+def user_resource(user: User) -> UserResource:
     """
     Serialize user model as API resource representation.
 
@@ -32,18 +43,18 @@ def user_resource(user: User) -> dict:
         user: User model instance.
 
     Returns:
-        dict: User API resource payload.
+        UserResource: User API resource payload.
     """
-    return {
-        "user_id": user.public_id,
-        "email": user.email,
-        "is_active": user.is_active,
-        "created_at": to_utc_z(user.created_at),
-        "updated_at": to_utc_z(user.updated_at),
-    }
+    return UserResource(
+        user_id=user.public_id,
+        email=user.email,
+        is_active=user.is_active,
+        created_at=as_utc(user.created_at),
+        updated_at=as_utc(user.updated_at),
+    )
 
 
-def product_resource(product: Product) -> dict:
+def product_resource(product: Product) -> ProductResource:
     """
     Serialize product model as API resource representation.
 
@@ -51,17 +62,17 @@ def product_resource(product: Product) -> dict:
         product: Product model instance.
 
     Returns:
-        dict: Product API resource payload.
+        ProductResource: Product API resource payload.
     """
-    return {
-        "product_id": product.public_id,
-        "name": product.name,
-        "description": product.description,
-        "price": product.price,
-        "stock": product.stock,
-        "created_at": to_utc_z(product.created_at),
-        "updated_at": to_utc_z(product.updated_at),
-    }
+    return ProductResource(
+        product_id=product.public_id,
+        name=product.name,
+        description=product.description,
+        price=product.price,
+        stock=product.stock,
+        created_at=as_utc(product.created_at),
+        updated_at=as_utc(product.updated_at),
+    )
 
 
 def make_etag(updated_at: datetime, public_id: str) -> str:

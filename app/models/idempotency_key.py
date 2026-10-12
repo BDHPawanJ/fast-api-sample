@@ -29,4 +29,6 @@ class IdempotencyKey(Base):
     principal_id = Column(String(36), nullable=True, index=True)
     response_status = Column(Integer, nullable=False)
     response_body = Column(Text, nullable=False)
-    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    created_at = Column(
+        DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.main import app
 
@@ -79,3 +80,15 @@ class TestHealthEndpoints:
         data = response.json()
         assert data["status"] == "degraded"
         assert data["database"]["status"] == "unhealthy"
+
+    async def test_detailed_health_check_hidden_in_production(
+        self, health_client, monkeypatch
+    ):
+        """Detailed health endpoint should respond 404 in production."""
+        client, _ = health_client
+        monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+
+        response = await client.get("/v1/health/detailed")
+
+        assert response.status_code == 404
+        assert response.headers["content-type"] == "application/problem+json"

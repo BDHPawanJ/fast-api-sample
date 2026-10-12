@@ -12,7 +12,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 - **Type Safety** - Full type hints and Pydantic validation
 - **Auto-generated Documentation** - Interactive Swagger UI and ReDoc
 - **Testing Suite** - Comprehensive tests with pytest and 70%+ coverage
-- **Code Quality** - Black and isort for consistent code formatting
+- **Code Quality** - Ruff for import sorting and consistent code formatting
 - **Database Migrations** - Alembic for managing database schema changes
 
 ##  Requirements
@@ -34,7 +34,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 | **Validation** | Pydantic 2.0 |
 | **Migrations** | Alembic |
 | **Testing** | pytest with httpx |
-| **Code Formatting** | Black + isort |
+| **Code Formatting** | Ruff |
 
 ##  Project Structure
 
@@ -42,6 +42,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 fastapi_sample/
 ├── app/
 │   ├── api/
+│   │   ├── openapi.py       # OpenAPI helpers (Problem Details error responses)
 │   │   └── routes/          # API route handlers
 │   │       ├── auth.py      # Authentication endpoints
 │   │       ├── health.py    # Health check endpoints
@@ -62,9 +63,9 @@ fastapi_sample/
 │   │   ├── user.py          # User model
 │   │   └── product.py       # Product model
 │   ├── schemas/
-│   │   ├── problem.py       # Problem Details error schema
-│   │   ├── user.py          # User schemas
-│   │   └── product.py       # Product schemas
+│   │   ├── generated.py     # Models generated from openapi.yaml (do not edit)
+│   │   ├── user.py          # User request schemas (extend generated models)
+│   │   └── product.py       # Product request schemas (extend generated models)
 │   ├── services/
 │   │   ├── auth_service.py  # Authentication business logic
 │   │   └── product_service.py # Product business logic
@@ -79,6 +80,7 @@ fastapi_sample/
 │   ├── test_auth.py         # Authentication tests
 │   ├── test_auth_service.py # Auth service tests
 │   ├── test_health.py       # Health route tests
+│   ├── test_openapi.py      # OpenAPI contract tests
 │   ├── test_products.py     # Product route tests
 │   ├── test_product_service.py # Product service tests
 │   └── test_security.py     # Security utility tests
@@ -90,6 +92,8 @@ fastapi_sample/
 │   ├── COMPARISON.md        # Framework comparison guide
 │   └── PROJECT.md           # Project explainer
 ├── .env                     # Local environment variables 
+├── Makefile                 # Schema generation, formatting and lint targets
+├── openapi.yaml             # OpenAPI contract (source of truth)
 ├── alembic.ini              # Alembic configuration
 ├── pyproject.toml           # Project metadata, dependencies and tool config
 ├── uv.lock                  # Locked dependency versions (managed by uv)
@@ -133,8 +137,12 @@ SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
 
 # Other settings
 ENVIRONMENT=development
-DEBUG=True
+DEBUG=True         # default: False
+DOCS_ENABLED=True  # serve /docs, /redoc, /openapi.json; default: False
 ```
+
+With `ENVIRONMENT=production`, `DEBUG` and `DOCS_ENABLED` are always forced off
+(regardless of their values), and `/v1/health/detailed` responds 404.
 
 ### 5. Create Database
 
@@ -190,12 +198,38 @@ uv run pytest tests/test_products.py -v
 
 ##  Code Formatting
 
-Format all code with Black and isort:
+Sort imports and format all code with Ruff:
 
 ```bash
-uv run isort app tests
-uv run black app tests
+make format   # uv run ruff check --fix . && uv run ruff format .
+make lint     # check only, e.g. in CI
 ```
+
+##  OpenAPI Contract and Generated Models
+
+`openapi.yaml` is the source of truth for the API. Every schema in it is
+generated into `app/schemas/generated.py` with
+[datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator).
+Never edit the generated file.
+
+- **Responses** (success and Problem Details errors) use the generated models directly.
+- **Requests** use thin subclasses in `app/schemas/user.py` and
+  `app/schemas/product.py` that add only logic the contract cannot express
+  (password must contain a letter and a digit, prices are rounded to 2 decimals).
+
+```bash
+make schemas        # Generate Pydantic models from openapi.yaml
+make schemas-check  # Fail if generated models are out of date (e.g. in CI)
+make openapi        # Verify the app serves exactly openapi.yaml
+```
+
+Generator options live in `[tool.datamodel-codegen]` in `pyproject.toml`, so
+`make schemas` is just `uv run datamodel-codegen`. The output is formatted with
+the project's Ruff configuration.
+
+To change the API: edit `openapi.yaml`, run `make schemas`, update routes or
+subclasses as needed, then run `make openapi` (which runs
+`tests/test_openapi.py`; use `pytest -vv` on it for a full diff).
 
 ##  API Documentation
 

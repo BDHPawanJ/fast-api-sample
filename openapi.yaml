@@ -1,0 +1,932 @@
+openapi: 3.1.0
+info:
+  title: FastAPI Sample Project
+  description: FastAPI service with JWT auth and product APIs.
+  version: 1.0.0
+paths:
+  /v1/auth/register:
+    post:
+      tags:
+      - Authentication
+      summary: Register a new user
+      description: Create a new user account with email and password
+      operationId: register_v1_auth_register_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResource'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/login:
+    post:
+      tags:
+      - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT access token
+      operationId: login_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      summary: Get current user
+      description: Get currently authenticated user information
+      operationId: get_current_user_info_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResource'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+      - HTTPBearer: []
+  /v1/products:
+    post:
+      tags:
+      - Products
+      summary: Create a new product
+      description: Create a new product (requires authentication)
+      operationId: create_new_product_v1_products_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResource'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    get:
+      tags:
+      - Products
+      summary: List products
+      description: Get cursor-paginated list of products
+      operationId: list_products_v1_products_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: Maximum number of records to return
+          default: 10
+          title: Limit
+        description: Maximum number of records to return
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Opaque cursor token
+          title: Cursor
+        description: Opaque cursor token
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 100
+          - type: 'null'
+          description: Search query for product name or description
+          title: Search
+        description: Search query for product name or description
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/products/{product_id}:
+    get:
+      tags:
+      - Products
+      summary: Get product by ID
+      description: Get a single product by its UUID identifier
+      operationId: get_product_v1_products__product_id__get
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResource'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      tags:
+      - Products
+      summary: Patch product
+      description: Partially update an existing product (requires authentication)
+      operationId: update_existing_product_v1_products__product_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+          title: If-Match
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResource'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '412':
+          description: Precondition Failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+      - Products
+      summary: Delete product
+      description: Delete a product by UUID (requires authentication)
+      operationId: delete_existing_product_v1_products__product_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/health:
+    get:
+      tags:
+      - Health
+      summary: Basic health check
+      description: "Return basic application health status.\n\nReturns:\n    HealthStatus: Application status metadata."
+      operationId: health_check_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /v1/health/db:
+    get:
+      tags:
+      - Health
+      summary: Database health check
+      description: "Test database connectivity and report health.\n\nArgs:\n    request: Incoming request instance.\n    db: Database session.\n\nReturns:\n    DatabaseHealth: Database health details."
+      operationId: database_health_check_v1_health_db_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseHealth'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/health/detailed:
+    get:
+      tags:
+      - Health
+      summary: Detailed health
+      description: Detailed health report. Not available in production (404).
+      operationId: detailed_health_check_v1_health_detailed_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedHealth'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /:
+    get:
+      tags:
+      - Root
+      summary: Root endpoint
+      description: "Return basic API information.\n\nReturns:\n    RootInfo: Service metadata and documentation endpoints."
+      operationId: root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RootInfo'
+components:
+  schemas:
+    ApplicationHealthDetail:
+      properties:
+        name:
+          type: string
+          title: Name
+          description: Application name
+        version:
+          type: string
+          title: Version
+          description: Application version
+        environment:
+          type: string
+          title: Environment
+          description: Runtime environment
+        debug_mode:
+          type: boolean
+          title: Debug Mode
+          description: Debug mode flag
+        status:
+          type: string
+          const: healthy
+          title: Status
+          description: Application status
+      type: object
+      required:
+      - name
+      - version
+      - environment
+      - debug_mode
+      - status
+      title: ApplicationHealthDetail
+      description: Application section of the detailed health report.
+    ConfigurationHealthDetail:
+      properties:
+        log_level:
+          type: string
+          title: Log Level
+          description: Logging level
+        log_format:
+          type: string
+          title: Log Format
+          description: Logging format
+        cors_enabled:
+          type: boolean
+          title: Cors Enabled
+          description: Whether CORS origins are set
+        jwt_algorithm:
+          type: string
+          title: Jwt Algorithm
+          description: JWT signing algorithm
+      type: object
+      required:
+      - log_level
+      - log_format
+      - cors_enabled
+      - jwt_algorithm
+      title: ConfigurationHealthDetail
+      description: Configuration section of the detailed health report.
+    DatabaseHealth:
+      properties:
+        status:
+          type: string
+          const: healthy
+          title: Status
+          description: Database status
+        database:
+          type: string
+          const: connected
+          title: Database
+          description: Connection state
+        database_type:
+          type: string
+          title: Database Type
+          description: Database engine
+      type: object
+      required:
+      - status
+      - database
+      - database_type
+      title: DatabaseHealth
+      description: Database connectivity health status.
+    DatabaseHealthDetail:
+      properties:
+        status:
+          type: string
+          enum:
+          - healthy
+          - unhealthy
+          title: Status
+          description: Status
+        message:
+          type: string
+          enum:
+          - connected
+          - disconnected
+          title: Message
+          description: Connection state
+        type:
+          type: string
+          title: Type
+          description: Database engine
+        pool_size:
+          type: integer
+          title: Pool Size
+          description: Connection pool size
+        max_overflow:
+          type: integer
+          title: Max Overflow
+          description: Maximum pool overflow
+      type: object
+      required:
+      - status
+      - message
+      - type
+      - pool_size
+      - max_overflow
+      title: DatabaseHealthDetail
+      description: Database section of the detailed health report.
+    DetailedHealth:
+      properties:
+        application:
+          $ref: '#/components/schemas/ApplicationHealthDetail'
+        database:
+          $ref: '#/components/schemas/DatabaseHealthDetail'
+        configuration:
+          $ref: '#/components/schemas/ConfigurationHealthDetail'
+        status:
+          type: string
+          enum:
+          - healthy
+          - degraded
+          title: Status
+          description: Overall status
+      type: object
+      required:
+      - application
+      - database
+      - configuration
+      - status
+      title: DetailedHealth
+      description: Detailed application, database and configuration health report.
+    HealthStatus:
+      properties:
+        status:
+          type: string
+          const: healthy
+          title: Status
+          description: Application status
+        application:
+          type: string
+          title: Application
+          description: Application name
+        version:
+          type: string
+          title: Version
+          description: Application version
+        environment:
+          type: string
+          title: Environment
+          description: Runtime environment
+      type: object
+      required:
+      - status
+      - application
+      - version
+      - environment
+      title: HealthStatus
+      description: Basic application health status.
+    LoginResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+          description: JWT access token
+        token_type:
+          type: string
+          const: bearer
+          title: Token Type
+          description: Token type
+        user:
+          $ref: '#/components/schemas/UserResource'
+          description: Authenticated user
+      type: object
+      required:
+      - access_token
+      - token_type
+      - user
+      title: LoginResponse
+      description: JWT access token issued on successful login.
+    ProblemDetails:
+      properties:
+        type:
+          type: string
+          title: Type
+          description: Problem type URI
+        title:
+          type: string
+          title: Title
+          description: Human-readable problem title
+        status:
+          type: integer
+          title: Status
+          description: HTTP status code
+        detail:
+          type: string
+          title: Detail
+          description: Context-specific problem details
+        instance:
+          type: string
+          title: Instance
+          description: Problem occurrence path
+        code:
+          type: string
+          title: Code
+          description: Machine-readable application error code
+        trace_id:
+          type: string
+          title: Trace Id
+          description: Request trace identifier
+        errors:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ProblemFieldError'
+            type: array
+          - type: 'null'
+          title: Errors
+          description: Optional detailed field/business-rule issues
+      type: object
+      required:
+      - type
+      - title
+      - status
+      - detail
+      - instance
+      - code
+      - trace_id
+      title: ProblemDetails
+      description: "Standardized error response payload for API failures.\n\nAttributes:\n    type: Stable URI identifying problem category.\n    title: Short human-readable summary of the problem type.\n    status: HTTP status code matching the response status.\n    detail: Context-specific problem detail for this occurrence.\n    instance: Request path or resource occurrence identifier.\n    code: Stable application-specific error code.\n    trace_id: Request correlation identifier.\n    errors: Optional list of field-level or rule-level issues."
+    ProblemFieldError:
+      properties:
+        field:
+          type: string
+          title: Field
+          description: Field name or path
+        code:
+          type: string
+          title: Code
+          description: Machine-readable error code
+      type: object
+      required:
+      - field
+      - code
+      title: ProblemFieldError
+      description: "Field-level error metadata used in Problem Details extensions.\n\nAttributes:\n    field: Name/path of the failing field.\n    code: Stable machine-readable error code."
+    ProductCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+          description: Product name
+          examples:
+          - Laptop
+          - Smartphone
+          - Headphones
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+          description: Detailed product description
+          examples:
+          - High-performance laptop with 16GB RAM and 512GB SSD
+        price:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Price
+          description: Product price (must be positive)
+          examples:
+          - 999.99
+          - 599.5
+          - 149.99
+        stock:
+          type: integer
+          minimum: 0.0
+          title: Stock
+          description: Available stock quantity (non-negative)
+          examples:
+          - 100
+          - 50
+          - 0
+      type: object
+      required:
+      - name
+      - price
+      - stock
+      title: ProductCreate
+      description: Schema for creating a new product.
+    ProductPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ProductResource'
+          type: array
+          title: Items
+          description: Products in this page
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+          description: Opaque cursor for the next page, null on the last page
+        has_more:
+          type: boolean
+          title: Has More
+          description: Whether more products are available
+      type: object
+      required:
+      - items
+      - next_cursor
+      - has_more
+      title: ProductPage
+      description: Cursor-paginated list of products.
+    ProductResource:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+          description: Public product identifier
+        name:
+          type: string
+          title: Name
+          description: Product name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          description: Product description
+        price:
+          type: number
+          title: Price
+          description: Product price
+        stock:
+          type: integer
+          title: Stock
+          description: Available stock quantity
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Product creation time (UTC)
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update time (UTC)
+      type: object
+      required:
+      - product_id
+      - name
+      - description
+      - price
+      - stock
+      - created_at
+      - updated_at
+      title: ProductResource
+      description: Product resource representation returned by the API.
+    ProductUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 255
+            minLength: 1
+          - type: 'null'
+          title: Name
+          description: Product name
+          examples:
+          - Updated Laptop
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+          description: Detailed product description
+          examples:
+          - Updated description with new features
+        price:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Price
+          description: Product price (must be positive)
+          examples:
+          - 899.99
+        stock:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Stock
+          description: Available stock quantity (non-negative)
+          examples:
+          - 75
+      type: object
+      title: ProductUpdate
+      description: "Schema for updating an existing product.\n\nAll fields are optional to allow partial updates.\n\nAttributes:\n    name: Product name (optional)\n    description: Product description (optional)\n    price: Product price (optional, must be positive)\n    stock: Available stock quantity (optional, non-negative)"
+    RootInfo:
+      properties:
+        application:
+          type: string
+          title: Application
+          description: Application name
+        version:
+          type: string
+          title: Version
+          description: Application version
+        docs:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Docs
+          description: Swagger UI path, null when API docs are disabled
+        redoc:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Redoc
+          description: ReDoc path, null when API docs are disabled
+        environment:
+          type: string
+          title: Environment
+          description: Runtime environment
+      type: object
+      required:
+      - application
+      - version
+      - docs
+      - redoc
+      - environment
+      title: RootInfo
+      description: Service metadata returned by the root endpoint.
+    UserCreate:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+          description: User email address
+          examples:
+          - user@example.com
+        password:
+          type: string
+          maxLength: 100
+          minLength: 8
+          title: Password
+          description: User password (minimum 8 characters)
+          examples:
+          - SecurePass123!
+      type: object
+      required:
+      - email
+      - password
+      title: UserCreate
+      description: "Schema for user registration.\n\nAttributes:\n    email: Valid email address\n    password: Password with minimum 8 characters"
+    UserLogin:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+          description: User email address
+          examples:
+          - user@example.com
+        password:
+          type: string
+          title: Password
+          description: User password
+          examples:
+          - SecurePass123!
+      type: object
+      required:
+      - email
+      - password
+      title: UserLogin
+      description: "Schema for user login.\n\nAttributes:\n    email: User email address\n    password: User password"
+    UserResource:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+          description: Public user identifier
+        email:
+          type: string
+          title: Email
+          description: User email address
+        is_active:
+          type: boolean
+          title: Is Active
+          description: Account active status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Account creation time (UTC)
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update time (UTC)
+      type: object
+      required:
+      - user_id
+      - email
+      - is_active
+      - created_at
+      - updated_at
+      title: UserResource
+      description: User resource representation returned by the API.
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

@@ -79,8 +79,7 @@ uv run pytest tests/test_products.py -v
 Format code:
 
 ```bash
-uv run isort app tests
-uv run black app tests
+make format
 ```
 
 ---
@@ -191,8 +190,10 @@ Path in code:
 - [app/services/idempotency_service.py](../app/services/idempotency_service.py): request replay safety
 
 ### Contracts and response shapes
-- [app/schemas/user.py](../app/schemas/user.py), [app/schemas/product.py](../app/schemas/product.py), [app/schemas/problem.py](../app/schemas/problem.py): input/output validation
-- [app/utils/serialization.py](../app/utils/serialization.py): resource JSON payload shape + ETag
+- [openapi.yaml](../openapi.yaml): OpenAPI contract, the source of truth
+- [app/schemas/generated.py](../app/schemas/generated.py): request and response models generated from `openapi.yaml` by `make schemas` (options in `[tool.datamodel-codegen]` in [pyproject.toml](../pyproject.toml))
+- [app/schemas/user.py](../app/schemas/user.py), [app/schemas/product.py](../app/schemas/product.py): subclasses adding custom request validation
+- [app/utils/serialization.py](../app/utils/serialization.py): ORM model to response model mapping + ETag
 - [app/utils/problem.py](../app/utils/problem.py): RFC 7807 problem response helper
 
 ### Tests and migrations

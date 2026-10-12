@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.openapi import problem_responses
 from app.constants import APIMessages, HTTPStatusCodes
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.schemas.generated import LoginResponse, UserResource
 from app.schemas.user import UserCreate, UserLogin
 from app.services.auth_service import authenticate_user, register_user
 from app.services.idempotency_service import (
@@ -29,7 +31,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post(
     "/register",
     status_code=HTTPStatusCodes.CREATED,
-    response_model=dict,
+    response_model=UserResource,
+    responses=problem_responses(409, 422),
     summary="Register a new user",
     description="Create a new user account with email and password",
 )
@@ -49,7 +52,7 @@ async def register(
         db: Active database session dependency.
 
     Returns:
-        dict: Created user resource.
+        UserResource: Created user resource.
     """
     payload_hash = request_hash(user_data.model_dump())
     record = await get_idempotency_record(
@@ -84,9 +87,9 @@ async def register(
             principal_id=None,
             request_body_hash=payload_hash,
             response_status=HTTPStatusCodes.CREATED,
-            response_body=body,
+            response_body=body.model_dump(mode="json"),
         )
-        return JSONResponse(status_code=HTTPStatusCodes.CREATED, content=body)
+        return body
     except ValueError:
         raise HTTPException(
             status_code=HTTPStatusCodes.CONFLICT,
@@ -97,7 +100,8 @@ async def register(
 @router.post(
     "/login",
     status_code=HTTPStatusCodes.OK,
-    response_model=dict,
+    response_model=LoginResponse,
+    responses=problem_responses(401, 422),
     summary="User login",
     description="Authenticate user and receive JWT access token",
 )
@@ -113,7 +117,7 @@ async def login(
         db: Active database session dependency.
 
     Returns:
-        dict: JWT token payload and user resource.
+        LoginResponse: JWT token payload and user resource.
     """
     user = await authenticate_user(db, credentials.email, credentials.password)
     if not user:
@@ -128,17 +132,18 @@ async def login(
         expires_delta=access_token_expires,
     )
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user_resource(user),
-    }
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=user_resource(user),
+    )
 
 
 @router.get(
     "/me",
     status_code=HTTPStatusCodes.OK,
-    response_model=dict,
+    response_model=UserResource,
+    responses=problem_responses(401),
     summary="Get current user",
     description="Get currently authenticated user information",
 )
@@ -152,6 +157,6 @@ async def get_current_user_info(
         current_user: Authenticated user resolved by dependency injection.
 
     Returns:
-        dict: Current user resource.
+        UserResource: Current user resource.
     """
     return user_resource(current_user)

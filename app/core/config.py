@@ -2,7 +2,7 @@
 
 from typing import Any, List, Optional, Union
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +14,8 @@ class Settings(BaseSettings):
         APP_NAME: Application name
         APP_VERSION: Application version
         ENVIRONMENT: Current environment (development, testing, production)
-        DEBUG: Debug mode flag
+        DEBUG: Debug mode flag (always False in production)
+        DOCS_ENABLED: Serve /docs, /redoc and /openapi.json (always False in production)
         HOST: Server host
         PORT: Server port
         DATABASE_URL: Database connection URL
@@ -46,7 +47,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "FastAPI Sample Project"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
+    DOCS_ENABLED: bool = False
 
     # Server Configuration
     HOST: str = "0.0.0.0"
@@ -139,6 +141,22 @@ class Settings(BaseSettings):
         if v not in valid_environments:
             raise ValueError(f"ENVIRONMENT must be one of {valid_environments}")
         return v
+
+    @model_validator(mode="after")
+    def disable_unsafe_features_in_production(self) -> "Settings":
+        """
+        Force debug mode and API docs off in production.
+
+        Applied after environment loading, so a stray ``DEBUG=true`` or
+        ``DOCS_ENABLED=true`` cannot enable them on a production server.
+
+        Returns:
+            Settings: Settings with production-safe flags.
+        """
+        if self.is_production:
+            self.DEBUG = False
+            self.DOCS_ENABLED = False
+        return self
 
     @property
     def cors_origins_list(self) -> List[str]:

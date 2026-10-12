@@ -4,7 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi.responses import JSONResponse
 
-from app.schemas.problem import ProblemDetails
+from app.api.openapi import PROBLEM_MEDIA_TYPE
+from app.schemas.generated import ProblemDetails
 
 
 def problem_response(
@@ -46,9 +47,9 @@ def problem_response(
         code=code,
         trace_id=trace_id,
         errors=errors,
-    ).model_dump(exclude_none=True)
+    ).model_dump(mode="json", exclude_none=True)
 
-    response_headers = {"Content-Type": "application/problem+json"}
+    response_headers = {"Content-Type": PROBLEM_MEDIA_TYPE}
     if headers:
         response_headers.update(headers)
     return JSONResponse(status_code=status, content=payload, headers=response_headers)

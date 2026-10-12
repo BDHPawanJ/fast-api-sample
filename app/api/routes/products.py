@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.openapi import problem_responses
 from app.constants import APIMessages, HTTPStatusCodes
 from app.core.config import settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.schemas.generated import ProductPage, ProductResource
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.services.idempotency_service import (
     decode_response_body,
@@ -35,7 +37,8 @@ router = APIRouter(prefix="/products", tags=["Products"])
 @router.post(
     "",
     status_code=HTTPStatusCodes.CREATED,
-    response_model=dict,
+    response_model=ProductResource,
+    responses=problem_responses(401, 409, 422),
     summary="Create a new product",
     description="Create a new product (requires authentication)",
 )
@@ -57,7 +60,7 @@ async def create_new_product(
         db: Database session.
 
     Returns:
-        dict: Created product resource.
+        ProductResource: Created product resource.
     """
     payload_hash = request_hash(product_data.model_dump())
     record = await get_idempotency_record(
@@ -91,15 +94,16 @@ async def create_new_product(
         principal_id=current_user.public_id,
         request_body_hash=payload_hash,
         response_status=HTTPStatusCodes.CREATED,
-        response_body=body,
+        response_body=body.model_dump(mode="json"),
     )
-    return JSONResponse(status_code=HTTPStatusCodes.CREATED, content=body)
+    return body
 
 
 @router.get(
     "",
     status_code=HTTPStatusCodes.OK,
-    response_model=dict,
+    response_model=ProductPage,
+    responses=problem_responses(400, 422),
     summary="List products",
     description="Get cursor-paginated list of products",
 )
@@ -129,7 +133,7 @@ async def list_products(
         db: Database session.
 
     Returns:
-        dict: Cursor pagination envelope with items and next cursor.
+        ProductPage: Cursor pagination envelope with items and next cursor.
     """
     last_seen_id = None
     if cursor:
@@ -152,22 +156,24 @@ async def list_products(
         encode_cursor(visible_rows[-1].id) if has_more and visible_rows else None
     )
 
-    return {
-        "items": [product_resource(row) for row in visible_rows],
-        "next_cursor": next_cursor,
-        "has_more": has_more,
-    }
+    return ProductPage(
+        items=[product_resource(row) for row in visible_rows],
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 @router.get(
     "/{product_id}",
     status_code=HTTPStatusCodes.OK,
-    response_model=dict,
+    response_model=ProductResource,
+    responses=problem_responses(404, 422),
     summary="Get product by ID",
     description="Get a single product by its UUID identifier",
 )
 async def get_product(
     product_id: str,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -175,10 +181,11 @@ async def get_product(
 
     Args:
         product_id: Product UUID identifier.
+        response: Outgoing response used to set the ETag header.
         db: Database session.
 
     Returns:
-        dict: Product resource representation.
+        ProductResource: Product resource representation.
     """
     product = await get_product_by_public_id(db, product_id)
     if not product:
@@ -187,22 +194,21 @@ async def get_product(
             detail=APIMessages.PRODUCT_NOT_FOUND,
         )
 
-    return JSONResponse(
-        status_code=HTTPStatusCodes.OK,
-        content=product_resource(product),
-        headers={"ETag": make_etag(product.updated_at, product.public_id)},
-    )
+    response.headers["ETag"] = make_etag(product.updated_at, product.public_id)
+    return product_resource(product)
 
 
 @router.patch(
     "/{product_id}",
     status_code=HTTPStatusCodes.OK,
-    response_model=dict,
+    response_model=ProductResource,
+    responses=problem_responses(401, 404, 412, 422),
     summary="Patch product",
     description="Partially update an existing product (requires authentication)",
 )
 async def update_existing_product(
     request: Request,
+    response: Response,
     product_id: str,
     product_data: ProductUpdate,
     if_match: str = Header(..., alias="If-Match"),
@@ -214,6 +220,7 @@ async def update_existing_product(
 
     Args:
         request: Incoming HTTP request.
+        response: Outgoing response used to set the ETag header.
         product_id: Product UUID identifier.
         product_data: Product update payload.
         if_match: Expected entity tag from latest resource retrieval.
@@ -221,7 +228,7 @@ async def update_existing_product(
         db: Database session.
 
     Returns:
-        dict: Updated product resource.
+        ProductResource: Updated product resource.
     """
     existing = await get_product_by_public_id(db, product_id)
     if not existing:
@@ -249,18 +256,16 @@ async def update_existing_product(
             detail=APIMessages.PRODUCT_NOT_FOUND,
         )
 
-    return JSONResponse(
-        status_code=HTTPStatusCodes.OK,
-        content=product_resource(updated_product),
-        headers={
-            "ETag": make_etag(updated_product.updated_at, updated_product.public_id)
-        },
+    response.headers["ETag"] = make_etag(
+        updated_product.updated_at, updated_product.public_id
     )
+    return product_resource(updated_product)
 
 
 @router.delete(
     "/{product_id}",
     status_code=HTTPStatusCodes.NO_CONTENT,
+    responses=problem_responses(401, 404, 422),
     summary="Delete product",
     description="Delete a product by UUID (requires authentication)",
 )

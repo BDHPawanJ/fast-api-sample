@@ -37,6 +37,27 @@ def test_environment_properties():
     assert prod_cfg.is_production is True
 
 
+def test_debug_and_docs_default_to_disabled():
+    """DEBUG and DOCS_ENABLED should be off unless explicitly enabled."""
+    cfg = Settings(_env_file=None)
+    assert cfg.DEBUG is False
+    assert cfg.DOCS_ENABLED is False
+
+
+def test_debug_and_docs_can_be_enabled_outside_production():
+    """Non-production environments should honor DEBUG and DOCS_ENABLED."""
+    cfg = Settings(ENVIRONMENT="development", DEBUG=True, DOCS_ENABLED=True)
+    assert cfg.DEBUG is True
+    assert cfg.DOCS_ENABLED is True
+
+
+def test_debug_and_docs_forced_off_in_production():
+    """Production should disable DEBUG and DOCS_ENABLED even if set to true."""
+    cfg = Settings(ENVIRONMENT="production", DEBUG=True, DOCS_ENABLED=True)
+    assert cfg.DEBUG is False
+    assert cfg.DOCS_ENABLED is False
+
+
 def test_db_url_uses_test_database_in_testing():
     """db_url should use test database URL when in testing environment."""
     cfg = Settings(
