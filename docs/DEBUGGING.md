@@ -109,7 +109,15 @@ the window; it reconnects once the container is back.
 
 ## Debugging tests
 
-Tests run in their own container, waiting for a debugger on port **5679**:
+**With a host `.venv`** (see
+[DEVELOPMENT.md → First-time setup](DEVELOPMENT.md#4-create-the-host-environment-recommended)),
+the simplest way is the VS Code test explorer: set a breakpoint and choose
+**Debug Test** on a test or file. pytest runs on your machine against the
+database container (start it with `make up`), and no port or attach step is
+involved.
+
+**In a container**, tests run in their own container, waiting for a debugger
+on port **5679**:
 
 ```bash
 make test-debug ARGS="tests/test_domain.py"
@@ -125,7 +133,8 @@ the debug session ends.
 - `ARGS` takes any pytest arguments.
 - **Coverage is turned off for debug runs.** pytest-cov installs its own
   tracer, which stops debugger breakpoints from firing, so `make test-debug`
-  passes `--no-cov`, and the dev container's test explorer does the same.
+  passes `--no-cov`, and the test explorer does the same (`.vscode/settings.json`).
+  If you run `uv run pytest` under a debugger yourself, add `--no-cov`.
 
 In the dev container, `make` and `docker` aren't available in the integrated
 terminal (it is a shell inside the container). There, either use the test
@@ -140,17 +149,20 @@ python -m debugpy --listen 0.0.0.0:5679 --wait-for-client -m pytest --no-cov tes
 
 ## Host window or dev container?
 
-Both work with the same `launch.json`:
+You don't need the dev container to debug. The API always runs in a
+container, and the debugger attaches to it over a port, so a normal VS Code
+window works the same way. Both setups use the same `launch.json`:
 
 | | Host window | Dev container |
 |---|---|---|
 | Debugger connects to | `localhost:5678` on your machine (published port) | `localhost:5678` inside the container |
 | Path mapping | your repo path → `/app` | `/app` → `/app` (`${workspaceFolder}` is `/app`) |
-| Code completion, type checking | Limited: the host has no Python environment | Full: uses `/opt/venv` |
-| Debug a test from the test explorer | No | Yes |
+| Code completion, type checking | Full with a host `.venv` (`uv sync`) | Full: uses `/opt/venv` |
+| Debug a test from the test explorer | Yes, with a host `.venv` | Yes |
+| `make test-debug` / `DEBUGPY_WAIT=1` | From the integrated terminal | From a terminal on your machine |
 
-The dev container is the recommended setup; see
-[DEVELOPMENT.md → Editing in VS Code](DEVELOPMENT.md#editing-in-vs-code-dev-container).
+Choose whichever you prefer; see
+[DEVELOPMENT.md → Editing in VS Code](DEVELOPMENT.md#editing-in-vs-code).
 
 ---
 
@@ -159,6 +171,8 @@ The dev container is the recommended setup; see
 Any editor that speaks the Debug Adapter Protocol can attach. Configure it to:
 
 - connect to `localhost:5678` (API) or `localhost:5679` (tests),
+- use the host `.venv` as the project interpreter, for completion and to run
+  tests under its own debugger,
 - map your repository directory to `/app`,
 - follow subprocesses, if the client supports it. Otherwise breakpoints only
   work in the first worker; restart the app container after code changes, or

@@ -1,6 +1,12 @@
 {
-  // Open the repo, then "Dev Containers: Reopen in Container". The Python,
-  // Pylance, debugpy and Ruff extensions are installed inside the container
-  // by .devcontainer/devcontainer.json.
-  "recommendations": ["ms-vscode-remote.remote-containers"]
+  // Host window: these extensions use the local .venv (`uv sync`).
+  // Dev container: "Dev Containers: Reopen in Container" installs the same
+  // Python extensions inside the container (.devcontainer/devcontainer.json).
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "charliermarsh.ruff",
+    "ms-vscode-remote.remote-containers"
+  ]
 }

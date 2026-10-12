@@ -10,7 +10,7 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 - **Async PostgreSQL** - SQLAlchemy 2 (async) with psycopg 3; Alembic migrations
 - **Contract-first** - `openapi.yaml` is the source of truth; Pydantic models are generated from it
 - **Problem Details errors** - RFC 7807 responses with stable error codes
-- **Containerized development** - One image for every environment; VS Code dev container and an attachable debugger
+- **Containerized development** - One image for every environment; an attachable debugger, with editing from a local uv environment or a VS Code dev container
 - **Tested and type-checked** - pytest (~90% coverage), pyright over app and tests, ruff, import-linter
 
 ##  Technology Stack
@@ -30,7 +30,9 @@ A FastAPI sample project demonstrating best practices for building RESTful APIs 
 
 ##  Quick Start
 
-You need Docker (with Compose v2) and `make`; everything else runs in containers.
+You need Docker (with Compose v2) and `make`; the API, database and `make`
+targets run in containers. Python 3.13 and [uv](https://docs.astral.sh/uv/)
+are recommended for editor support.
 
 ```bash
 git clone <repository-url> && cd fast-api-sample
@@ -44,14 +46,16 @@ make test       # run the test suite
 The API is now at http://localhost:8000, with interactive docs at
 http://localhost:8000/docs. `make help` lists every command.
 
-For editing, open the folder in VS Code and run **Dev Containers: Reopen in
-Container**.
+For editing, run `uv sync` to create a local `.venv`, then open the folder
+in VS Code. Without Python on your machine, use **Dev Containers: Reopen in
+Container** instead. See
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#editing-in-vs-code).
 
 ##  Documentation
 
 | Document | Read it for |
 |---|---|
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Container setup, daily workflow, migrations, dependencies, configuration, troubleshooting |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Container and local setup, daily workflow, migrations, dependencies, configuration, troubleshooting |
 | [docs/DEBUGGING.md](docs/DEBUGGING.md) | Attaching a debugger to the API, startup code and tests |
 | [docs/STRUCTURE.md](docs/STRUCTURE.md) | Folder structure, the layers, and where new code goes |
 | [docs/PROJECT.md](docs/PROJECT.md) | Walkthrough: architecture, startup, idempotent requests |

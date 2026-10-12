@@ -1,0 +1,15 @@
+{
+  // Shared by the host window and the dev container. The interpreter is not
+  // set here: the host uses ./.venv (auto-detected), the dev container sets
+  // /opt/venv in .devcontainer/devcontainer.json.
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  // pytest-cov's tracer stops debugger breakpoints from firing.
+  "python.testing.pytestArgs": ["--no-cov"],
+  // Use the lockfile's ruff, not the extension's bundled copy, so the editor
+  // and `make lint` agree.
+  "ruff.importStrategy": "fromEnvironment",
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  }
+}
